@@ -1,6 +1,41 @@
 #import <AppKit/AppKit.h>
+#import <CoreText/CoreText.h>
 #include <assert.h>
 #include <math.h>
+
+enum { VisibleRows = 7 };
+static const CGFloat Padding = 4;
+static const CGFloat ResultSpacing = 15;
+
+static NSColor *backgroundColor(void) {
+    return [NSColor colorWithSRGBRed:40.0/255 green:40.0/255 blue:40.0/255 alpha:1];
+}
+
+static NSColor *textColor(void) {
+    return [NSColor colorWithSRGBRed:212.0/255 green:190.0/255 blue:152.0/255 alpha:1];
+}
+
+static NSFont *launcherFont(void) {
+    static NSFont *font;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSURL *url = [NSBundle.mainBundle URLForResource:@"NotoSansMono-ExtraCondensedBlack" withExtension:@"ttf"];
+        if (url) CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, NULL);
+        font = [NSFont fontWithName:@"NotoSansMono-ExtraCondensedBlack" size:16]
+            ?: [NSFont fontWithName:@"FiraMonoNFM-Bold" size:16]
+            ?: [NSFont monospacedSystemFontOfSize:16 weight:NSFontWeightBold];
+    });
+    return font;
+}
+
+static CGFloat textHeight(void) {
+    NSFont *font = launcherFont();
+    return ceil(font.ascender - font.descender + font.leading);
+}
+
+static CGFloat rowHeight(void) {
+    return textHeight() + Padding * 2;
+}
 
 static BOOL matches(NSString *query, NSString *name) {
     NSStringCompareOptions options = NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch;
@@ -36,6 +71,47 @@ static NSArray<NSURL *> *installedApps(void) {
     }];
 }
 
+@interface ResultsView : NSView
+@property NSArray<NSString *> *names;
+@property NSInteger selected;
+@property(copy) void (^onSelect)(NSInteger, BOOL);
+@end
+
+@implementation ResultsView
+- (BOOL)isFlipped { return YES; }
+
+- (void)drawRect:(NSRect)dirtyRect {
+    NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
+    paragraph.lineBreakMode = NSLineBreakByTruncatingTail;
+    for (NSUInteger i = 0; i < self.names.count; i++) {
+        BOOL selected = (NSInteger)i == self.selected;
+        NSDictionary *attributes = @{
+            NSFontAttributeName:launcherFont(),
+            NSForegroundColorAttributeName:selected ? backgroundColor() : textColor(),
+            NSParagraphStyleAttributeName:paragraph
+        };
+        CGFloat y = i * (rowHeight() + ResultSpacing);
+        if (selected) {
+            [textColor() setFill];
+            CGFloat width = MIN(self.bounds.size.width,
+                ceil([self.names[i] sizeWithAttributes:attributes].width) + Padding * 2);
+            NSRectFill(NSMakeRect(0, y, width, rowHeight()));
+        }
+        [self.names[i] drawInRect:NSMakeRect(Padding, y + Padding,
+            self.bounds.size.width - Padding * 2, textHeight()) withAttributes:attributes];
+    }
+}
+
+- (void)mouseDown:(NSEvent *)event {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    NSInteger row = floor(point.y / (rowHeight() + ResultSpacing));
+    CGFloat withinRow = point.y - row * (rowHeight() + ResultSpacing);
+    if (row >= 0 && row < (NSInteger)self.names.count && withinRow < rowHeight()) {
+        if (self.onSelect) self.onSelect(row, event.clickCount == 2);
+    }
+}
+@end
+
 @interface LauncherWindow : NSWindow
 @end
 
@@ -44,14 +120,16 @@ static NSArray<NSURL *> *installedApps(void) {
 - (BOOL)canBecomeMainWindow { return YES; }
 @end
 
-@interface Launcher : NSObject <NSApplicationDelegate, NSWindowDelegate,
-    NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate>
+@interface Launcher : NSObject <NSApplicationDelegate, NSWindowDelegate, NSTextFieldDelegate>
 @property NSWindow *window;
 @property NSView *selector;
 @property NSTextField *search;
-@property NSTableView *table;
+@property NSTextView *editor;
+@property ResultsView *results;
 @property NSArray<NSURL *> *apps;
 @property NSArray<NSURL *> *filtered;
+@property NSInteger selected;
+@property NSUInteger firstVisible;
 @property BOOL smokeTest;
 @end
 
@@ -67,64 +145,122 @@ static NSArray<NSURL *> *installedApps(void) {
     self.window.releasedWhenClosed = NO;
     self.window.opaque = NO;
     self.window.hasShadow = NO;
-    self.window.backgroundColor = [NSColor colorWithWhite:0 alpha:0.6];
+    self.window.backgroundColor = [backgroundColor() colorWithAlphaComponent:0.8];
     self.window.level = NSFloatingWindowLevel;
     self.window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
         NSWindowCollectionBehaviorFullScreenAuxiliary;
 
-    CGFloat width = MIN(560, screen.size.width - 32);
-    CGFloat height = MIN(330, screen.size.height - 32);
-    self.selector = [[NSView alloc] initWithFrame:NSMakeRect(
-        (screen.size.width - width) / 2, (screen.size.height - height) / 2, width, height)];
+    CGFloat x = floor(screen.size.width * 0.4);
+    CGFloat width = screen.size.width - x - 16;
+    CGFloat resultsHeight = VisibleRows * rowHeight() + (VisibleRows - 1) * ResultSpacing;
+    CGFloat height = rowHeight() + ResultSpacing + resultsHeight;
+    self.selector = [[NSView alloc] initWithFrame:NSMakeRect(x,
+        floor(screen.size.height * 0.65 - height), width, height)];
     [self.window.contentView addSubview:self.selector];
 
-    self.search = [[NSTextField alloc] initWithFrame:NSMakeRect(16, height - 44, width - 32, 28)];
-    self.search.placeholderString = @"Search apps…";
+    NSTextField *prompt = [NSTextField labelWithString:@">  "];
+    prompt.font = launcherFont();
+    prompt.textColor = textColor();
+    CGFloat promptWidth = ceil([@">  " sizeWithAttributes:@{NSFontAttributeName:launcherFont()}].width);
+    prompt.frame = NSMakeRect(Padding, height - rowHeight() + Padding, promptWidth, textHeight());
+    [self.selector addSubview:prompt];
+
+    self.search = [[NSTextField alloc] initWithFrame:NSMakeRect(Padding + promptWidth,
+        height - rowHeight() + Padding, width - promptWidth - Padding * 2, textHeight())];
+    self.search.font = launcherFont();
+    self.search.textColor = textColor();
+    self.search.bezeled = NO;
+    self.search.bordered = NO;
+    self.search.drawsBackground = NO;
+    self.search.focusRingType = NSFocusRingTypeNone;
     self.search.delegate = self;
+    NSTextFieldCell *cell = self.search.cell;
+    cell.wraps = NO;
+    cell.usesSingleLineMode = YES;
+    cell.scrollable = YES;
     [self.selector addSubview:self.search];
 
-    NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(16, 16, width - 32, height - 72)];
-    scroll.hasVerticalScroller = YES;
-    self.table = [[NSTableView alloc] initWithFrame:scroll.bounds];
-    NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"app"];
-    column.width = width - 52;
-    [self.table addTableColumn:column];
-    self.table.headerView = nil;
-    self.table.rowHeight = 30;
-    self.table.dataSource = self;
-    self.table.delegate = self;
-    self.table.target = self;
-    self.table.doubleAction = @selector(launchSelected:);
-    scroll.documentView = self.table;
-    [self.selector addSubview:scroll];
+    self.results = [[ResultsView alloc] initWithFrame:NSMakeRect(0, 0, width, resultsHeight)];
+    __weak Launcher *weakSelf = self;
+    self.results.onSelect = ^(NSInteger row, BOOL launch) {
+        Launcher *launcher = weakSelf;
+        if (!launcher) return;
+        launcher.selected = launcher.firstVisible + row;
+        [launcher renderResults];
+        if (launch) [launcher launchSelected:nil];
+    };
+    [self.selector addSubview:self.results];
     [self updateResults];
     [self show];
 
     if (self.smokeTest) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            BOOL ok = self.window.isVisible && self.window.isKeyWindow && self.table.numberOfRows > 0;
+            BOOL ok = self.window.isVisible && self.window.isKeyWindow && self.filtered.count > 0;
             ok &= self.window.styleMask == NSWindowStyleMaskBorderless;
             ok &= !self.window.hasShadow && !self.window.isOpaque;
-            ok &= self.window.backgroundColor.alphaComponent > 0 && self.window.backgroundColor.alphaComponent < 1;
+            ok &= fabs(self.window.backgroundColor.alphaComponent - 0.8) < 0.001;
             ok &= NSEqualRects(self.window.frame, self.window.screen.frame);
-            ok &= fabs(NSMidX(self.selector.frame) - NSMidX(self.window.contentView.bounds)) < 1;
-            ok &= fabs(NSMidY(self.selector.frame) - NSMidY(self.window.contentView.bounds)) < 1;
+            ok &= fabs(self.selector.frame.origin.x - floor(self.window.frame.size.width * 0.4)) < 1;
+            ok &= fabs(NSMaxY(self.selector.frame) - self.window.frame.size.height * 0.65) < 1;
             ok &= self.search.currentEditor == self.window.firstResponder;
+            ok &= !self.search.isBordered && !self.search.drawsBackground;
+            ok &= [self.editor.insertionPointColor isEqual:textColor()];
+            ok &= [launcherFont().fontName isEqualToString:@"NotoSansMono-ExtraCondensedBlack"];
+            ok &= self.results.names.count == MIN(VisibleRows, self.filtered.count);
+            const char *preview = getenv("MINILAUNCH_PREVIEW");
+            if (preview) {
+                NSBitmapImageRep *image = [self.selector bitmapImageRepForCachingDisplayInRect:self.selector.bounds];
+                [self.selector cacheDisplayInRect:self.selector.bounds toBitmapImageRep:image];
+                NSData *png = [image representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+                ok &= [png writeToFile:@(preview) atomically:YES];
+            }
+            for (int i = 0; i < VisibleRows + 1; i++) [self moveSelection:1];
+            ok &= self.selected == VisibleRows + 1 && self.firstVisible == 2;
+            ok &= self.results.selected == VisibleRows - 1;
+            [self moveSelection:-1];
+            ok &= self.selected == VisibleRows && self.firstVisible == 2;
+            [self moveSelection:self.filtered.count];
+            ok &= self.selected == (NSInteger)self.filtered.count - 1;
+            ok &= self.results.selected == VisibleRows - 1;
+            [self moveSelection:-(NSInteger)self.filtered.count];
+            ok &= self.selected == 0 && self.firstVisible == 0;
+            self.results.onSelect(1, NO);
+            ok &= self.selected == 1 && self.results.selected == 1;
             self.search.stringValue = self.apps.firstObject.lastPathComponent.stringByDeletingPathExtension;
             [self updateResults];
-            ok &= [self.filtered containsObject:self.apps.firstObject] && self.table.selectedRow == 0;
-            [self control:self.search textView:[NSTextView new] doCommandBySelector:@selector(moveUp:)];
-            ok &= self.table.selectedRow == 0;
+            ok &= [self.filtered containsObject:self.apps.firstObject] && self.selected == 0;
+            ok &= self.firstVisible == 0;
+            [self moveSelection:-1];
+            ok &= self.selected == 0;
             self.search.stringValue = @"this-app-does-not-exist-123456789";
             [self updateResults];
-            ok &= self.filtered.count == 0 && self.table.selectedRow == -1;
+            ok &= self.filtered.count == 0 && self.selected == -1 && self.results.names.count == 0;
             [self launchSelected:nil];
             self.search.stringValue = @"";
             [self updateResults];
-            printf("UI smoke test: %s (%ld apps)\n", ok ? "PASS" : "FAIL", (long)self.table.numberOfRows);
+            printf("UI smoke test: %s (%lu apps, font: %s)\n", ok ? "PASS" : "FAIL",
+                (unsigned long)self.filtered.count, launcherFont().fontName.UTF8String);
             exit(ok ? 0 : 1);
         });
     }
+}
+
+- (id)windowWillReturnFieldEditor:(NSWindow *)window toObject:(id)object {
+    if (object != self.search) return nil;
+    if (!self.editor) {
+        self.editor = [NSTextView new];
+        self.editor.fieldEditor = YES;
+        self.editor.drawsBackground = NO;
+        self.editor.richText = NO;
+        self.editor.insertionPointColor = textColor();
+        self.editor.selectedTextAttributes = @{
+            NSBackgroundColorAttributeName:textColor(),
+            NSForegroundColorAttributeName:backgroundColor()
+        };
+        self.editor.automaticQuoteSubstitutionEnabled = NO;
+        self.editor.automaticSpellingCorrectionEnabled = NO;
+    }
+    return self.editor;
 }
 
 - (void)show {
@@ -145,30 +281,38 @@ static NSArray<NSURL *> *installedApps(void) {
         ^BOOL(NSURL *url, NSDictionary *bindings) {
             return matches(query, url.lastPathComponent.stringByDeletingPathExtension);
         }]];
-    [self.table reloadData];
-    if (self.filtered.count) {
-        [self.table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
-        [self.table scrollRowToVisible:0];
+    self.selected = self.filtered.count ? 0 : -1;
+    self.firstVisible = 0;
+    [self renderResults];
+}
+
+- (void)renderResults {
+    NSUInteger count = MIN(VisibleRows, self.filtered.count - self.firstVisible);
+    NSMutableArray *names = [NSMutableArray arrayWithCapacity:count];
+    for (NSUInteger i = self.firstVisible; i < self.firstVisible + count; i++) {
+        [names addObject:self.filtered[i].lastPathComponent.stringByDeletingPathExtension];
     }
+    self.results.names = names;
+    self.results.selected = self.selected - (NSInteger)self.firstVisible;
+    self.results.needsDisplay = YES;
+}
+
+- (void)moveSelection:(NSInteger)step {
+    if (!self.filtered.count) return;
+    self.selected = MAX(0, MIN((NSInteger)self.filtered.count - 1, self.selected + step));
+    if (self.selected < (NSInteger)self.firstVisible) self.firstVisible = self.selected;
+    if (self.selected >= (NSInteger)self.firstVisible + VisibleRows) {
+        self.firstVisible = self.selected - VisibleRows + 1;
+    }
+    [self renderResults];
 }
 
 - (void)controlTextDidChange:(NSNotification *)notification {
     [self updateResults];
 }
 
-- (NSInteger)numberOfRowsInTableView:(NSTableView *)table {
-    return self.filtered.count;
-}
-
-- (NSView *)tableView:(NSTableView *)table viewForTableColumn:(NSTableColumn *)column row:(NSInteger)row {
-    NSTextField *label = [NSTextField labelWithString:
-        self.filtered[row].lastPathComponent.stringByDeletingPathExtension];
-    label.lineBreakMode = NSLineBreakByTruncatingTail;
-    return label;
-}
-
 - (void)launchSelected:(id)sender {
-    NSInteger row = self.table.selectedRow;
+    NSInteger row = self.selected;
     if (row < 0 || row >= (NSInteger)self.filtered.count) return;
     [NSWorkspace.sharedWorkspace openApplicationAtURL:self.filtered[row]
         configuration:NSWorkspaceOpenConfiguration.configuration
@@ -192,13 +336,7 @@ static NSArray<NSURL *> *installedApps(void) {
     } else if (command == @selector(insertNewline:)) {
         [self launchSelected:nil];
     } else if (command == @selector(moveDown:) || command == @selector(moveUp:)) {
-        NSInteger count = self.filtered.count;
-        if (count) {
-            NSInteger row = self.table.selectedRow + (command == @selector(moveDown:) ? 1 : -1);
-            row = MAX(0, MIN(count - 1, row));
-            [self.table selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
-            [self.table scrollRowToVisible:row];
-        }
+        [self moveSelection:command == @selector(moveDown:) ? 1 : -1];
     } else {
         return NO;
     }

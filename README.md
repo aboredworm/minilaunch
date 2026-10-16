@@ -1,6 +1,6 @@
 # MiniLaunch
 
-Minimal native macOS launcher written in Objective-C with AppKit. No third-party dependencies.
+Minimal native macOS launcher written in Objective-C with AppKit. No third-party runtime libraries.
 
 ## Build and run
 
@@ -11,7 +11,15 @@ Requires macOS 12+ and the Xcode command-line tools.
 open build/MiniLaunch.app
 ```
 
-A borderless, screen-sized translucent overlay dims the current main display, with a native search box and app list centered on it. There is no window title bar or shadow. The macOS menu bar is unchanged.
+A borderless, screen-sized overlay dims the current main display. Styling follows `platforms/archlinux/.config/tofi/` in the dotfiles repo:
+
+- Background `#282828` at 80% opacity and text `#d4be98`.
+- Inverted selection with 4-point padding around the selected name.
+- `>  ` prompt, seven visible results, and 15-point spacing between rows.
+- Text positioned 40% across and 35% down the display.
+- Bundled Noto Sans Mono ExtraCondensed Black at 16 points.
+
+There are no window decorations, input borders, list backgrounds, or scrollbars. The macOS menu bar is unchanged. Arrow keys move through all results beyond the seven visible rows.
 
 Type to fuzzy-filter app names. Use Up/Down and Enter to launch, or double-click a result. Escape quits the process. `./toggle.sh` starts the launcher when absent and terminates its process when present. Nothing runs in the background after dismissal or launching an app. Opening the bundle directly only shows it; macOS reopen events do not dismiss it.
 
@@ -21,7 +29,7 @@ The current AeroSpace configuration opens this bundle with Option+U:
 alt-u = 'exec-and-forget ~/.local/share/minilaunch/toggle.sh'
 ```
 
-Apps are read from the standard Applications directories and their Utilities folders when the launcher starts. Search matches characters in order, ignoring case and accents. Results are alphabetical. There is no ranking, recursive app indexing, or custom styling yet.
+Apps are read from the standard Applications directories and their Utilities folders when the launcher starts. Search matches characters in order, ignoring case and accents. Results are alphabetical. There is no ranking or recursive app indexing.
 
 ## Checks
 
@@ -30,6 +38,10 @@ build/MiniLaunch.app/Contents/MacOS/MiniLaunch --test
 build/MiniLaunch.app/Contents/MacOS/MiniLaunch --smoke-test
 ```
 
-The smoke test briefly opens the UI and checks the borderless overlay, screen coverage, centered selector, keyboard focus, discovery, filtering, selection, and empty results. Launching a result can be checked interactively with Enter.
+The smoke test briefly opens the UI and checks the borderless overlay, screen coverage, Tofi positioning, font, keyboard focus, discovery, filtering, seven-row viewport navigation, mouse selection, and empty results. Set `MINILAUNCH_PREVIEW=/tmp/minilaunch-preview.png` when running it to save a preview of the selector without capturing the desktop. Launching a result can be checked interactively with Enter.
 
 To check the AeroSpace toggle, press Option+U twice. The first press opens the overlay; the second dismisses it and exits the process. Run `tests/toggle.sh` with the launcher closed to check three cycles through AeroSpace, including that the first press produces an active, screen-sized window that stays visible for three seconds. This requires AeroSpace and the binding above.
+
+## Font attribution
+
+`assets/NotoSansMono-ExtraCondensedBlack.ttf` is bundled unmodified from [notofonts/noto-fonts](https://github.com/notofonts/noto-fonts/blob/326a408bd3657d082c9af9ebd63e9e1bed599d10/hinted/ttf/NotoSansMono/NotoSansMono-ExtraCondensedBlack.ttf). Its SIL Open Font License is included as `assets/OFL.txt` and copied into the app bundle. The font is registered only for the launcher process, with Fira Mono or system monospace as fallbacks.
