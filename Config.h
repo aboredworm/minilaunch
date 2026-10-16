@@ -14,4 +14,5 @@
 @property(readonly) CGFloat yPosition;
 + (NSString *)defaultPath;
 - (instancetype)initWithContentsOfFile:(NSString *)path;
+- (BOOL)isEqualToConfig:(LauncherConfig *)other;
 @end

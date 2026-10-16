@@ -104,4 +104,14 @@ static NSNumber *parseNumber(NSString *value, double minimum, double maximum, BO
     _yPosition = [values[@"y-position"] doubleValue];
     return self;
 }
+
+- (BOOL)isEqualToConfig:(LauncherConfig *)other {
+    return [self.backgroundColor isEqual:other.backgroundColor] &&
+        [self.textColor isEqual:other.textColor] &&
+        [self.selectionBackground isEqual:other.selectionBackground] &&
+        [self.selectionColor isEqual:other.selectionColor] &&
+        [self.font isEqual:other.font] && self.backgroundOpacity == other.backgroundOpacity &&
+        self.padding == other.padding && self.resultSpacing == other.resultSpacing &&
+        self.visibleRows == other.visibleRows && self.xPosition == other.xPosition && self.yPosition == other.yPosition;
+}
 @end

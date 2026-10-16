@@ -82,6 +82,19 @@ int main(void) {
         LauncherConfig *reloaded = load(path, @"text-color=#010203\n");
         expectColor(reloaded.textColor, 0x010203);
         expectColor(custom.textColor, 0xd4be98);
+        assert([defaults isEqualToConfig:[LauncherConfig new]]);
+        assert([defaults isEqualToConfig:bad]);
+        assert(![defaults isEqualToConfig:nil]);
+        NSArray *changes = @[@"background-color=#112233", @"text-color=#112233",
+            @"selection-background=#112233", @"selection-color=#112233",
+            [NSString stringWithFormat:@"font=%@", fontName], @"font-size=19",
+            @"background-opacity=0.7", @"padding=5", @"result-spacing=16", @"visible-rows=8",
+            @"x-position=41", @"y-position=36"];
+        for (NSString *change in changes) {
+            LauncherConfig *changed = load(path, change);
+            assert(![defaults isEqualToConfig:changed]);
+            assert(![changed isEqualToConfig:defaults]);
+        }
 
         NSDictionary *environment = NSProcessInfo.processInfo.environment;
         NSString *xdg = environment[@"XDG_CONFIG_HOME"];
