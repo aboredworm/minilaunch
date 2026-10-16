@@ -199,7 +199,7 @@ static NSArray<NSURL *> *installedApps(void) {
     self.search.delegate = self;
     NSTextFieldCell *cell = self.search.cell;
     cell.wraps = NO;
-    cell.usesSingleLineMode = YES;
+    cell.usesSingleLineMode = NO;
     cell.scrollable = YES;
     [self.selector addSubview:self.search];
 
@@ -229,8 +229,14 @@ static NSArray<NSURL *> *installedApps(void) {
             ok &= self.search.currentEditor == self.window.firstResponder;
             ok &= !self.search.isBordered && !self.search.drawsBackground;
             ok &= [self.editor.insertionPointColor isEqual:textColor()];
-            [self.editor insertText:@"Example" replacementRange:NSMakeRange(0, self.editor.string.length)];
+            [self.editor insertText:@"Fgjp" replacementRange:NSMakeRange(0, self.editor.string.length)];
             [self updateResults];
+            NSRange glyphs = [self.editor.layoutManager glyphRangeForTextContainer:self.editor.textContainer];
+            NSRect line = [self.editor.layoutManager lineFragmentRectForGlyphAtIndex:glyphs.location effectiveRange:NULL];
+            ok &= line.size.height >= floor(launcherFont().ascender - launcherFont().descender);
+            NSRect textRect = NSOffsetRect(line, self.editor.textContainerOrigin.x, self.editor.textContainerOrigin.y);
+            ok &= NSMinY(textRect) >= NSMinY(self.editor.bounds);
+            ok &= NSMaxY(textRect) <= NSMaxY(self.editor.bounds);
             [self.editor setSelectedRange:NSMakeRange(0, 0)];
             NSRect queryText = [self.editor convertRect:self.editor.blockCursorRect toView:self.selector];
             ok &= fabs(NSMidY(self.prompt.frame) - NSMidY(queryText)) < 1;
@@ -325,7 +331,7 @@ static NSArray<NSURL *> *installedApps(void) {
     if (!self.editor) {
         self.editor = [QueryEditor new];
         self.editor.font = launcherFont();
-        self.editor.textContainerInset = NSMakeSize(0, 4.5);
+        self.editor.textContainerInset = NSZeroSize;
         self.editor.textContainer.lineFragmentPadding = 0;
         self.editor.blockTextColor = backgroundColor();
         self.editor.fieldEditor = YES;
@@ -347,6 +353,7 @@ static NSArray<NSURL *> *installedApps(void) {
     [self.window makeKeyAndOrderFront:nil];
     [self.window makeFirstResponder:self.search];
     if (self.search.currentEditor == self.editor) {
+        self.editor.textContainerInset = NSZeroSize;
         self.editor.textContainer.lineFragmentPadding = 0;
         [self.editor invalidateTextContainerOrigin];
     }
