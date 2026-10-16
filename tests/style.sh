@@ -9,6 +9,9 @@ trap 'rm -rf "$root"' EXIT
 "$binary" --smoke-test
 "$binary" --smoke-test --config config.example
 "$binary" --smoke-test --config "$root/missing"
+for style in styles/*.conf; do
+    "$binary" --smoke-test --config "$style"
+done
 
 printf '%s\n' \
     'font = Menlo-Bold' 'font-size = 24' \

@@ -28,6 +28,7 @@ For AeroSpace, add this under `[mode.main.binding]` and run `aerospace reload-co
 
 ```toml
 alt-u = 'exec-and-forget ~/.local/share/minilaunch/toggle.sh'
+alt-shift-u = 'exec-and-forget ~/.local/share/minilaunch/demo-toggle.sh'
 ```
 
 ## Styling
@@ -42,3 +43,9 @@ font-size = 18
 ```
 
 Defaults are gray and white with system monospace. Fonts must be installed on your Mac; none are bundled. The example file lists spacing, position, and selection options. Unknown settings and invalid values are ignored with a warning.
+
+## Demo styles
+
+Option+Shift+U opens the next style each time: Default, Warm, Electric (cyan/pink, upper-left), then Paper (ivory/green, lower-right with a serif font). Close with Escape or the same shortcut. Your normal config is unchanged.
+
+Presets live in [`styles/`](styles). Run `./demo-toggle.sh --reset` to start again from Default.
