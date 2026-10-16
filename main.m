@@ -135,6 +135,7 @@ static NSArray<NSURL *> *installedApps(void) {
 @interface Launcher : NSObject <NSApplicationDelegate, NSWindowDelegate, NSTextFieldDelegate>
 @property NSWindow *window;
 @property NSView *selector;
+@property NSTextField *prompt;
 @property NSTextField *search;
 @property QueryEditor *editor;
 @property ResultsView *results;
@@ -180,12 +181,12 @@ static NSArray<NSURL *> *installedApps(void) {
         floor(screen.size.height * 0.65 - height), width, height)];
     [self.window.contentView addSubview:self.selector];
 
-    NSTextField *prompt = [NSTextField labelWithString:@">  "];
-    prompt.font = launcherFont();
-    prompt.textColor = textColor();
+    self.prompt = [NSTextField labelWithString:@">  "];
+    self.prompt.font = launcherFont();
+    self.prompt.textColor = textColor();
     CGFloat promptWidth = ceil([@">  " sizeWithAttributes:@{NSFontAttributeName:launcherFont()}].width);
-    prompt.frame = NSMakeRect(Padding, height - rowHeight() + Padding, promptWidth, textHeight());
-    [self.selector addSubview:prompt];
+    self.prompt.frame = NSMakeRect(Padding, height - rowHeight() + Padding, promptWidth, textHeight());
+    [self.selector addSubview:self.prompt];
 
     self.search = [[NSTextField alloc] initWithFrame:NSMakeRect(Padding + promptWidth,
         height - rowHeight() + Padding, width - promptWidth - Padding * 2, textHeight())];
@@ -228,6 +229,12 @@ static NSArray<NSURL *> *installedApps(void) {
             ok &= self.search.currentEditor == self.window.firstResponder;
             ok &= !self.search.isBordered && !self.search.drawsBackground;
             ok &= [self.editor.insertionPointColor isEqual:textColor()];
+            [self.editor insertText:@"Example" replacementRange:NSMakeRange(0, self.editor.string.length)];
+            [self updateResults];
+            [self.editor setSelectedRange:NSMakeRange(0, 0)];
+            NSRect queryText = [self.editor convertRect:self.editor.blockCursorRect toView:self.selector];
+            ok &= fabs(NSMidY(self.prompt.frame) - NSMidY(queryText)) < 1;
+            ok &= fabs(NSMinX(self.search.frame) - NSMinX(queryText)) < 1;
             ok &= [launcherFont().fontName isEqualToString:@"NotoSansMono-ExtraCondensedBlack"];
             ok &= launcherFont().pointSize == FontSize;
             NSArray *installed = self.apps;
@@ -318,6 +325,8 @@ static NSArray<NSURL *> *installedApps(void) {
     if (!self.editor) {
         self.editor = [QueryEditor new];
         self.editor.font = launcherFont();
+        self.editor.textContainerInset = NSMakeSize(0, 4.5);
+        self.editor.textContainer.lineFragmentPadding = 0;
         self.editor.blockTextColor = backgroundColor();
         self.editor.fieldEditor = YES;
         self.editor.drawsBackground = NO;
@@ -337,6 +346,10 @@ static NSArray<NSURL *> *installedApps(void) {
     [NSApp activateIgnoringOtherApps:YES];
     [self.window makeKeyAndOrderFront:nil];
     [self.window makeFirstResponder:self.search];
+    if (self.search.currentEditor == self.editor) {
+        self.editor.textContainer.lineFragmentPadding = 0;
+        [self.editor invalidateTextContainerOrigin];
+    }
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)app hasVisibleWindows:(BOOL)visible {
