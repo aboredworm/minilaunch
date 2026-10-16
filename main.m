@@ -1,9 +1,12 @@
 #import <AppKit/AppKit.h>
 #import "Config.h"
+#import "Demo.h"
 #import "History.h"
+#import "InstanceLock.h"
 #import "QueryEditor.h"
 #import "Search.h"
 #include <assert.h>
+#include <errno.h>
 #include <math.h>
 #include <unistd.h>
 
@@ -11,6 +14,17 @@ static LauncherConfig *config;
 static NSUInteger VisibleRows;
 static CGFloat Padding;
 static CGFloat ResultSpacing;
+static NSString *const CommandNotification = @"local.minilaunch.command";
+
+static NSString *instancePath(void) {
+    return NSBundle.mainBundle.executableURL.URLByResolvingSymlinksInPath.path;
+}
+
+static NSString *absolutePath(NSString *path) {
+    path = path.stringByExpandingTildeInPath;
+    if (!path.isAbsolutePath) path = [NSFileManager.defaultManager.currentDirectoryPath stringByAppendingPathComponent:path];
+    return path.stringByStandardizingPath;
+}
 
 static NSColor *backgroundColor(void) {
     return config.backgroundColor;
@@ -114,10 +128,56 @@ static NSArray<NSURL *> *installedApps(void) {
 @property NSUInteger firstVisible;
 @property(copy) NSString *configPath;
 @property BOOL launching;
+@property BOOL wantsVisible;
 @property LaunchHistory *history;
 @end
 
 @implementation Launcher
+- (void)registerCommands {
+    [NSDistributedNotificationCenter.defaultCenter addObserver:self selector:@selector(receiveCommand:)
+        name:CommandNotification object:instancePath() suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
+}
+
+- (void)receiveCommand:(NSNotification *)notification {
+    NSString *command = notification.userInfo[@"command"];
+    if (![command isKindOfClass:NSString.class]) return;
+    if ([command isEqualToString:@"quit"]) {
+        [NSApp terminate:nil];
+        return;
+    }
+    if ([command isEqualToString:@"reset-demo"]) {
+        NSError *error = nil;
+        if (!resetDemoStyle(demoStateURL(), &error)) {
+            fprintf(stderr, "Could not reset demo styles: %s\n", error.localizedDescription.UTF8String);
+        }
+        return;
+    }
+    BOOL visible = self.search ? (self.window.isVisible && !NSApp.isHidden) : self.wantsVisible;
+    if ([command isEqualToString:@"hide"] ||
+        (([command isEqualToString:@"toggle"] || [command isEqualToString:@"demo"]) && visible)) {
+        [self hide];
+        return;
+    }
+    if ([command isEqualToString:@"demo"]) {
+        NSString *directory = notification.userInfo[@"stylesDirectory"];
+        if (![directory isKindOfClass:NSString.class] || !directory.isAbsolutePath) return;
+        NSError *error = nil;
+        NSString *path = nextDemoStyle(directory, demoStateURL(), &error);
+        if (!path) {
+            fprintf(stderr, "Could not load demo style: %s\n", error.localizedDescription.UTF8String);
+            return;
+        }
+        self.configPath = path;
+    } else if ([command isEqualToString:@"show"] || [command isEqualToString:@"toggle"]) {
+        NSString *path = notification.userInfo[@"configPath"];
+        if (![path isKindOfClass:NSString.class] || !path.isAbsolutePath) return;
+        self.configPath = path;
+    } else {
+        return;
+    }
+    [self show];
+}
+
 - (void)prepareOverlay {
     config = [[LauncherConfig alloc] initWithContentsOfFile:self.configPath];
     Padding = config.padding;
@@ -136,17 +196,31 @@ static NSArray<NSURL *> *installedApps(void) {
     self.window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
         NSWindowCollectionBehaviorFullScreenAuxiliary;
     self.window.ignoresMouseEvents = YES;
-    [NSCursor setHiddenUntilMouseMoves:YES];
-    [self.window orderFrontRegardless];
-    [self.window displayIfNeeded];
+    if (self.wantsVisible) {
+        [NSCursor setHiddenUntilMouseMoves:YES];
+        [self.window orderFrontRegardless];
+        [self.window displayIfNeeded];
+    }
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
-    dispatch_async(dispatch_get_main_queue(), ^{ [self buildInterface]; });
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self refreshData];
+        config = [[LauncherConfig alloc] initWithContentsOfFile:self.configPath];
+        Padding = config.padding;
+        ResultSpacing = config.resultSpacing;
+        self.window.backgroundColor = [backgroundColor() colorWithAlphaComponent:config.backgroundOpacity];
+        [self buildInterface];
+        if (self.wantsVisible) [self present];
+        else {
+            [self.window makeFirstResponder:self.search];
+            [self.window displayIfNeeded];
+        }
+    });
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
-    [NSCursor setHiddenUntilMouseMoves:YES];
+    [NSCursor setHiddenUntilMouseMoves:self.wantsVisible && self.window.isVisible];
 }
 
 - (void)applicationDidResignActive:(NSNotification *)notification {
@@ -157,12 +231,18 @@ static NSArray<NSURL *> *installedApps(void) {
     [NSCursor setHiddenUntilMouseMoves:NO];
 }
 
-- (void)buildInterface {
+- (void)refreshData {
     self.apps = installedApps();
     NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
         inDomains:NSUserDomainMask].firstObject;
     NSURL *historyURL = [[support URLByAppendingPathComponent:@"MiniLaunch"] URLByAppendingPathComponent:@"usage.json"];
     self.history = [[LaunchHistory alloc] initWithURL:historyURL];
+}
+
+- (void)buildInterface {
+    if (self.search) [self.window endEditingFor:self.search];
+    [self.selector removeFromSuperview];
+    self.editor = nil;
     NSRect screen = self.window.frame;
     CGFloat minimumWidth = ceil([@">  MMMM" sizeWithAttributes:@{NSFontAttributeName:launcherFont()}].width) + Padding * 2;
     CGFloat x = MIN(floor(screen.size.width * config.xPosition / 100), MAX(0, screen.size.width - minimumWidth - 16));
@@ -208,7 +288,6 @@ static NSArray<NSURL *> *installedApps(void) {
     };
     [self.selector addSubview:self.results];
     [self updateResults];
-    [self show];
 }
 
 - (id)windowWillReturnFieldEditor:(NSWindow *)window toObject:(id)object {
@@ -230,8 +309,38 @@ static NSArray<NSURL *> *installedApps(void) {
 }
 
 - (void)show {
+    self.wantsVisible = YES;
     if (!self.search) return;
+    [self refreshData];
+    LauncherConfig *next = [[LauncherConfig alloc] initWithContentsOfFile:self.configPath];
+    NSRect screen = NSScreen.mainScreen.frame;
+    if (![config isEqualToConfig:next] || !NSEqualRects(screen, self.window.frame)) {
+        config = next;
+        Padding = config.padding;
+        ResultSpacing = config.resultSpacing;
+        self.window.backgroundColor = [backgroundColor() colorWithAlphaComponent:config.backgroundOpacity];
+        [self.window setFrame:screen display:NO];
+        [self buildInterface];
+    } else {
+        [self updateResults];
+    }
+    [self present];
+}
+
+- (void)hide {
+    self.wantsVisible = NO;
+    [self.window orderOut:nil];
+    [NSApp hide:nil];
+    [NSCursor setHiddenUntilMouseMoves:NO];
+    self.editor.string = @"";
+    self.search.stringValue = @"";
+    [self updateResults];
+}
+
+- (void)present {
+    if (!self.search || !self.wantsVisible) return;
     self.window.ignoresMouseEvents = NO;
+    [NSApp unhideWithoutActivation];
     [NSApp activateIgnoringOtherApps:YES];
     [self.window makeKeyAndOrderFront:nil];
     [self.window makeFirstResponder:self.search];
@@ -248,6 +357,7 @@ static NSArray<NSURL *> *installedApps(void) {
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)app hasVisibleWindows:(BOOL)visible {
+    self.configPath = LauncherConfig.defaultPath;
     [self show];
     return YES;
 }
@@ -303,7 +413,8 @@ static NSArray<NSURL *> *installedApps(void) {
                     [alert runModal];
                 } else {
                     [self.history recordLaunch:url];
-                    [NSApp terminate:nil];
+                    self.launching = NO;
+                    [self hide];
                 }
             });
         }];
@@ -311,7 +422,7 @@ static NSArray<NSURL *> *installedApps(void) {
 
 - (BOOL)control:(NSControl *)control textView:(NSTextView *)view doCommandBySelector:(SEL)command {
     if (command == @selector(cancelOperation:)) {
-        [NSApp terminate:nil];
+        [self hide];
     } else if (command == @selector(insertNewline:)) {
         [self launchSelected:nil];
     } else if (command == @selector(moveDown:) || command == @selector(moveUp:)) {
@@ -323,37 +434,62 @@ static NSArray<NSURL *> *installedApps(void) {
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app {
-    return YES;
+    return NO;
 }
 @end
 
-static int toggleRunningInstance(void) {
+static int sendCommandToInstance(NSDictionary *request) {
     NSBundle *bundle = NSBundle.mainBundle;
     if (!bundle.bundleIdentifier) return 0;
-    NSURL *executable = bundle.executableURL.URLByResolvingSymlinksInPath;
-    BOOL found = NO, success = YES;
+    NSString *path = instancePath();
     for (NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:bundle.bundleIdentifier]) {
         if (app.processIdentifier == getpid() ||
-            ![app.executableURL.URLByResolvingSymlinksInPath isEqual:executable]) continue;
-        found = YES;
-        if (![app terminate]) success = NO;
+            ![app.executableURL.URLByResolvingSymlinksInPath.path isEqualToString:path]) continue;
+        for (NSUInteger attempt = 0; attempt < 200 && !app.finishedLaunching && !app.terminated; attempt++) {
+            [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+        }
+        if (app.terminated) continue;
+        [NSDistributedNotificationCenter.defaultCenter postNotificationName:CommandNotification
+            object:path userInfo:request deliverImmediately:YES];
+        if ([request[@"command"] isEqualToString:@"quit"]) {
+            for (NSUInteger attempt = 0; attempt < 400 && !app.terminated; attempt++) {
+                [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+            }
+            if (!app.terminated) {
+                fprintf(stderr, "MiniLaunch did not quit. Close any open dialog and try again.\n");
+                return -1;
+            }
+        }
+        return 1;
     }
-    if (!success) fprintf(stderr, "Could not close the running MiniLaunch.\n");
-    return found ? (success ? 1 : -1) : 0;
+    return 0;
 }
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        BOOL test = NO, toggle = NO;
-        NSString *configPath = nil;
+        BOOL test = NO;
+        NSUInteger commands = 0;
+        NSString *command = @"show", *configPath = nil, *stylesDirectory = nil;
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--test") == 0) test = YES;
-            else if (strcmp(argv[i], "--toggle") == 0) toggle = YES;
-            else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) configPath = @(argv[++i]).stringByExpandingTildeInPath;
-            else {
-                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--toggle] [--test]\n");
+            else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) configPath = absolutePath(@(argv[++i]));
+            else if (strcmp(argv[i], "--demo") == 0 && i + 1 < argc) {
+                command = @"demo";
+                stylesDirectory = absolutePath(@(argv[++i]));
+                commands++;
+            } else if (strcmp(argv[i], "--toggle") == 0 || strcmp(argv[i], "--hide") == 0 ||
+                strcmp(argv[i], "--quit") == 0 || strcmp(argv[i], "--background") == 0 ||
+                strcmp(argv[i], "--reset-demo") == 0) {
+                command = [@(argv[i]) substringFromIndex:2];
+                commands++;
+            } else {
+                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--toggle | --hide | --quit | --background | --demo DIRECTORY | --reset-demo] [--test]\n");
                 return 2;
             }
+        }
+        if (commands > 1) {
+            fprintf(stderr, "Choose one launcher command.\n");
+            return 2;
         }
         if (test) {
             assert(fuzzyScore(@"", @"Safari") >= 0);
@@ -367,17 +503,52 @@ int main(int argc, const char *argv[]) {
             puts("Search and app discovery tests passed.");
             return 0;
         }
-        if (toggle) {
-            int result = toggleRunningInstance();
-            if (result != 0) return result < 0 ? 1 : 0;
+        NSMutableDictionary *request = [@{@"command":command,
+            @"configPath":configPath ?: LauncherConfig.defaultPath} mutableCopy];
+        if (stylesDirectory) request[@"stylesDirectory"] = stylesDirectory;
+        int sent = sendCommandToInstance(request);
+        if (sent != 0) return sent < 0 ? 1 : 0;
+        if ([command isEqualToString:@"reset-demo"]) {
+            NSError *error = nil;
+            if (resetDemoStyle(demoStateURL(), &error)) return 0;
+            fprintf(stderr, "Could not reset demo styles: %s\n", error.localizedDescription.UTF8String);
+            return 1;
+        }
+        if ([command isEqualToString:@"hide"] || [command isEqualToString:@"quit"]) return 0;
+        NSError *lockError = nil;
+        NSURL *locks = [[demoStateURL() URLByDeletingLastPathComponent] URLByAppendingPathComponent:@"instances" isDirectory:YES];
+        int lockFD = acquireInstanceLock(instancePath(), locks, &lockError);
+        if (lockFD < 0) {
+            if ([lockError.domain isEqualToString:NSPOSIXErrorDomain] && lockError.code == EWOULDBLOCK) {
+                for (NSUInteger attempt = 0; attempt < 200; attempt++) {
+                    sent = sendCommandToInstance(request);
+                    if (sent != 0) return sent < 0 ? 1 : 0;
+                    usleep(5000);
+                }
+                fprintf(stderr, "MiniLaunch is still starting. Try again shortly.\n");
+            } else {
+                fprintf(stderr, "Could not start MiniLaunch: %s\n", lockError.localizedDescription.UTF8String);
+            }
+            return 1;
+        }
+        if ([command isEqualToString:@"demo"]) {
+            NSError *error = nil;
+            configPath = nextDemoStyle(stylesDirectory, demoStateURL(), &error);
+            if (!configPath) {
+                fprintf(stderr, "Could not load demo style: %s\n", error.localizedDescription.UTF8String);
+                return 1;
+            }
         }
         NSApplication *app = NSApplication.sharedApplication;
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
         Launcher *launcher = [Launcher new];
         launcher.configPath = configPath ?: LauncherConfig.defaultPath;
+        launcher.wantsVisible = ![command isEqualToString:@"background"];
         app.delegate = launcher;
+        [launcher registerCommands];
         [launcher prepareOverlay];
         [app run];
+        close(lockFD);
     }
     return 0;
 }

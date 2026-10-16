@@ -1,6 +1,6 @@
 # MiniLaunch
 
-A native macOS app launcher with fuzzy search and [Tofi](https://github.com/philj56/tofi)-inspired styling. Better matches rank first; launch history breaks ties. Nothing runs in the background when closed.
+A native macOS app launcher with fuzzy search and [Tofi](https://github.com/philj56/tofi)-inspired styling. Better matches rank first; launch history breaks ties. Stays idle between searches for fast reopening.
 
 ## Install
 
@@ -14,23 +14,26 @@ cd ~/projects/minilaunch
 open ~/.local/share/minilaunch/MiniLaunch.app
 ```
 
-Source stays in the checkout. Only the app, scripts, and demo styles are installed in `~/.local/share/minilaunch`. Rerun `./install.sh` to deploy changes; `./build.sh` only builds the development copy.
+Source stays in the checkout. Only the app, scripts, and demo styles are installed in `~/.local/share/minilaunch`. Quit MiniLaunch before rerunning `./install.sh` to deploy changes. `./build.sh` only builds the development copy.
 
 ## Use
 
-Type an app name, select with Up/Down, and press Enter to launch. Escape closes it. Ctrl+U clears the query; Ctrl+W deletes the previous word.
+Type an app name, select with Up/Down, and press Enter to launch. Escape hides it. Ctrl+U clears the query; Ctrl+W deletes the previous word.
 
 An empty search shows previously launched apps. On first use, start typing.
 
+Hiding or launching an app keeps MiniLaunch ready in the background and clears the query. Run `~/.local/share/minilaunch/quit.sh` to quit completely. The first opening after quitting is a cold launch; no login item is installed.
+
 ## Shortcut
 
-Bind `~/.local/share/minilaunch/toggle.sh` to a shortcut to open or close the launcher.
+Bind `~/.local/share/minilaunch/toggle.sh` to a shortcut to show or hide the launcher.
 
 For AeroSpace, invoke the app directly under `[mode.main.binding]` and run `aerospace reload-config`:
 
 ```toml
 alt-u = 'exec-and-forget exec ~/.local/share/minilaunch/MiniLaunch.app/Contents/MacOS/MiniLaunch --toggle'
 alt-shift-u = 'exec-and-forget ~/.local/share/minilaunch/demo-toggle.sh'
+ctrl-alt-shift-u = 'exec-and-forget exec ~/.local/share/minilaunch/MiniLaunch.app/Contents/MacOS/MiniLaunch --quit'
 ```
 
 ## Styling
@@ -48,6 +51,6 @@ Defaults are gray and white with system monospace. Fonts must be installed on yo
 
 ## Demo styles
 
-Option+Shift+U opens the next style each time: Default, Warm, Electric (cyan/pink, upper-left), then Paper (off-white, sand selection, Baskerville). Close with Escape or the same shortcut. Your normal config is unchanged.
+Option+Shift+U opens the next style each time: Default, Warm, Electric (cyan/pink, upper-left), then Paper (off-white, sand selection, Baskerville). Hide with Escape or the same shortcut. Your normal config is unchanged.
 
 Presets live in [`styles/`](styles). Run `./demo-toggle.sh --reset` to start again from Default.
