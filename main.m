@@ -1,34 +1,25 @@
 #import <AppKit/AppKit.h>
-#import <CoreText/CoreText.h>
+#import "Config.h"
 #import "History.h"
 #import "QueryEditor.h"
 #include <assert.h>
 #include <math.h>
 
-enum { VisibleRows = 7 };
-static const CGFloat FontSize = 18;
-static const CGFloat Padding = 4;
-static const CGFloat ResultSpacing = 15;
+static LauncherConfig *config;
+static NSUInteger VisibleRows;
+static CGFloat Padding;
+static CGFloat ResultSpacing;
 
 static NSColor *backgroundColor(void) {
-    return [NSColor colorWithSRGBRed:40.0/255 green:40.0/255 blue:40.0/255 alpha:1];
+    return config.backgroundColor;
 }
 
 static NSColor *textColor(void) {
-    return [NSColor colorWithSRGBRed:212.0/255 green:190.0/255 blue:152.0/255 alpha:1];
+    return config.textColor;
 }
 
 static NSFont *launcherFont(void) {
-    static NSFont *font;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        NSURL *url = [NSBundle.mainBundle URLForResource:@"NotoSansMono-ExtraCondensedBlack" withExtension:@"ttf"];
-        if (url) CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, NULL);
-        font = [NSFont fontWithName:@"NotoSansMono-ExtraCondensedBlack" size:FontSize]
-            ?: [NSFont fontWithName:@"FiraMonoNFM-Bold" size:FontSize]
-            ?: [NSFont monospacedSystemFontOfSize:FontSize weight:NSFontWeightBold];
-    });
-    return font;
+    return config.font;
 }
 
 static CGFloat textHeight(void) {
@@ -99,12 +90,12 @@ static NSArray<NSURL *> *installedApps(void) {
         BOOL selected = (NSInteger)i == self.selected;
         NSDictionary *attributes = @{
             NSFontAttributeName:launcherFont(),
-            NSForegroundColorAttributeName:selected ? backgroundColor() : textColor(),
+            NSForegroundColorAttributeName:selected ? config.selectionColor : textColor(),
             NSParagraphStyleAttributeName:paragraph
         };
         CGFloat y = i * (rowHeight() + ResultSpacing);
         if (selected) {
-            [textColor() setFill];
+            [config.selectionBackground setFill];
             CGFloat width = MIN(self.bounds.size.width,
                 ceil([self.names[i] sizeWithAttributes:attributes].width) + Padding * 2);
             NSRectFill(NSMakeRect(0, y, width, rowHeight()));
@@ -144,12 +135,16 @@ static NSArray<NSURL *> *installedApps(void) {
 @property NSInteger selected;
 @property NSUInteger firstVisible;
 @property BOOL smokeTest;
+@property(copy) NSString *configPath;
 @property BOOL launching;
 @property LaunchHistory *history;
 @end
 
 @implementation Launcher
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
+    config = [[LauncherConfig alloc] initWithContentsOfFile:self.configPath];
+    Padding = config.padding;
+    ResultSpacing = config.resultSpacing;
     self.apps = installedApps();
     NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
         inDomains:NSUserDomainMask].firstObject;
@@ -168,17 +163,20 @@ static NSArray<NSURL *> *installedApps(void) {
     self.window.releasedWhenClosed = NO;
     self.window.opaque = NO;
     self.window.hasShadow = NO;
-    self.window.backgroundColor = [backgroundColor() colorWithAlphaComponent:0.8];
+    self.window.backgroundColor = [backgroundColor() colorWithAlphaComponent:config.backgroundOpacity];
     self.window.level = NSFloatingWindowLevel;
     self.window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
         NSWindowCollectionBehaviorFullScreenAuxiliary;
 
-    CGFloat x = floor(screen.size.width * 0.4);
+    CGFloat minimumWidth = ceil([@">  MMMM" sizeWithAttributes:@{NSFontAttributeName:launcherFont()}].width) + Padding * 2;
+    CGFloat x = MIN(floor(screen.size.width * config.xPosition / 100), MAX(0, screen.size.width - minimumWidth - 16));
     CGFloat width = screen.size.width - x - 16;
+    NSUInteger fittingRows = MAX(1, floor((screen.size.height - rowHeight()) / (rowHeight() + ResultSpacing)));
+    VisibleRows = MIN(config.visibleRows, fittingRows);
     CGFloat resultsHeight = VisibleRows * rowHeight() + (VisibleRows - 1) * ResultSpacing;
     CGFloat height = rowHeight() + ResultSpacing + resultsHeight;
-    self.selector = [[NSView alloc] initWithFrame:NSMakeRect(x,
-        floor(screen.size.height * 0.65 - height), width, height)];
+    CGFloat y = MAX(0, floor(screen.size.height * (1 - config.yPosition / 100) - height));
+    self.selector = [[NSView alloc] initWithFrame:NSMakeRect(x, y, width, height)];
     [self.window.contentView addSubview:self.selector];
 
     self.prompt = [NSTextField labelWithString:@">  "];
@@ -222,13 +220,17 @@ static NSArray<NSURL *> *installedApps(void) {
             ok &= self.filtered.count == 0 && self.selected == -1 && self.results.names.count == 0;
             ok &= self.window.styleMask == NSWindowStyleMaskBorderless;
             ok &= !self.window.hasShadow && !self.window.isOpaque;
-            ok &= fabs(self.window.backgroundColor.alphaComponent - 0.8) < 0.001;
+            ok &= fabs(self.window.backgroundColor.alphaComponent - config.backgroundOpacity) < 0.001;
             ok &= NSEqualRects(self.window.frame, self.window.screen.frame);
-            ok &= fabs(self.selector.frame.origin.x - floor(self.window.frame.size.width * 0.4)) < 1;
-            ok &= fabs(NSMaxY(self.selector.frame) - self.window.frame.size.height * 0.65) < 1;
+            ok &= fabs(self.selector.frame.origin.x - x) < 1;
+            ok &= fabs(self.selector.frame.origin.y - y) < 1;
+            ok &= NSContainsRect(self.window.contentView.bounds, self.selector.frame);
             ok &= self.search.currentEditor == self.window.firstResponder;
             ok &= !self.search.isBordered && !self.search.drawsBackground;
-            ok &= [self.editor.insertionPointColor isEqual:textColor()];
+            ok &= [self.editor.insertionPointColor isEqual:config.selectionBackground];
+            ok &= [self.editor.blockTextColor isEqual:config.selectionColor];
+            ok &= [self.editor.selectedTextAttributes[NSBackgroundColorAttributeName] isEqual:config.selectionBackground];
+            ok &= [self.editor.selectedTextAttributes[NSForegroundColorAttributeName] isEqual:config.selectionColor];
             [self.editor insertText:@"Fgjp" replacementRange:NSMakeRange(0, self.editor.string.length)];
             [self updateResults];
             NSRange glyphs = [self.editor.layoutManager glyphRangeForTextContainer:self.editor.textContainer];
@@ -241,12 +243,12 @@ static NSArray<NSURL *> *installedApps(void) {
             NSRect queryText = [self.editor convertRect:self.editor.blockCursorRect toView:self.selector];
             ok &= fabs(NSMidY(self.prompt.frame) - NSMidY(queryText)) < 1;
             ok &= fabs(NSMinX(self.search.frame) - NSMinX(queryText)) < 1;
-            ok &= [launcherFont().fontName isEqualToString:@"NotoSansMono-ExtraCondensedBlack"];
-            ok &= launcherFont().pointSize == FontSize;
+            ok &= [self.editor.font isEqual:config.font] && [self.search.font isEqual:config.font];
+            ok &= [self.search.textColor isEqual:config.textColor] && [self.prompt.textColor isEqual:config.textColor];
             NSArray *installed = self.apps;
             NSMutableArray *fixtures = [NSMutableArray array];
-            for (int i = 0; i < 10; i++) {
-                [fixtures addObject:[NSURL fileURLWithPath:[NSString stringWithFormat:@"/Applications/Example %02d.app", i]]];
+            for (NSUInteger i = 0; i < MAX(10, VisibleRows + 3); i++) {
+                [fixtures addObject:[NSURL fileURLWithPath:[NSString stringWithFormat:@"/Applications/Example %02lu.app", (unsigned long)i]]];
             }
             self.apps = fixtures;
             self.search.stringValue = @"Example";
@@ -261,18 +263,19 @@ static NSArray<NSURL *> *installedApps(void) {
                 NSData *png = [image representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
                 ok &= [png writeToFile:@(preview) atomically:YES];
             }
-            for (int i = 0; i < VisibleRows + 1; i++) [self moveSelection:1];
-            ok &= self.selected == VisibleRows + 1 && self.firstVisible == 2;
-            ok &= self.results.selected == VisibleRows - 1;
+            for (NSUInteger i = 0; i < VisibleRows + 1; i++) [self moveSelection:1];
+            ok &= self.selected == (NSInteger)VisibleRows + 1 && self.firstVisible == 2;
+            ok &= self.results.selected == (NSInteger)VisibleRows - 1;
             [self moveSelection:-1];
-            ok &= self.selected == VisibleRows && self.firstVisible == 2;
+            ok &= self.selected == (NSInteger)VisibleRows && self.firstVisible == MIN(2, VisibleRows);
             [self moveSelection:self.filtered.count];
             ok &= self.selected == (NSInteger)self.filtered.count - 1;
-            ok &= self.results.selected == VisibleRows - 1;
+            ok &= self.results.selected == (NSInteger)VisibleRows - 1;
             [self moveSelection:-(NSInteger)self.filtered.count];
             ok &= self.selected == 0 && self.firstVisible == 0;
-            self.results.onSelect(1, NO);
-            ok &= self.selected == 1 && self.results.selected == 1;
+            NSInteger clickedRow = MIN(1, VisibleRows - 1);
+            self.results.onSelect(clickedRow, NO);
+            ok &= self.selected == clickedRow && self.results.selected == clickedRow;
             self.search.stringValue = self.apps.firstObject.lastPathComponent.stringByDeletingPathExtension;
             [self updateResults];
             ok &= [self.filtered containsObject:self.apps.firstObject] && self.selected == 0;
@@ -286,7 +289,7 @@ static NSArray<NSURL *> *installedApps(void) {
             [self.editor insertText:@"Example 09" replacementRange:NSMakeRange(0, self.editor.string.length)];
             ok &= [self.search.stringValue isEqualToString:@"Example 09"] && self.filtered.count == 1;
             sendControlKey(self.editor, @"w");
-            ok &= [self.search.stringValue isEqualToString:@"Example "] && self.filtered.count == 10;
+            ok &= [self.search.stringValue isEqualToString:@"Example "] && self.filtered.count == fixtures.count;
             [self.editor setSelectedRange:NSMakeRange(2, 0)];
             sendControlKey(self.editor, @"u");
             ok &= self.search.stringValue.length == 0 && self.filtered.count == 0;
@@ -311,7 +314,7 @@ static NSArray<NSURL *> *installedApps(void) {
             sendControlKey(self.editor, @"\x17");
             ok &= self.search.stringValue.length == 0;
             NSRect caret = self.editor.blockCursorRect;
-            ok &= !NSIsEmptyRect(caret) && caret.size.width >= 5;
+            ok &= !NSIsEmptyRect(caret) && caret.size.width > 0;
             [self.editor drawInsertionPointInRect:caret color:textColor() turnedOn:NO];
             [self.editor updateInsertionPointStateAndRestartTimer:YES];
             ok &= NSEqualRects(caret, self.editor.blockCursorRect);
@@ -333,15 +336,11 @@ static NSArray<NSURL *> *installedApps(void) {
         self.editor.font = launcherFont();
         self.editor.textContainerInset = NSZeroSize;
         self.editor.textContainer.lineFragmentPadding = 0;
-        self.editor.blockTextColor = backgroundColor();
+        self.editor.blockTextColor = config.selectionColor;
         self.editor.fieldEditor = YES;
         self.editor.drawsBackground = NO;
         self.editor.richText = NO;
-        self.editor.insertionPointColor = textColor();
-        self.editor.selectedTextAttributes = @{
-            NSBackgroundColorAttributeName:textColor(),
-            NSForegroundColorAttributeName:backgroundColor()
-        };
+        self.editor.insertionPointColor = config.selectionBackground;
         self.editor.automaticQuoteSubstitutionEnabled = NO;
         self.editor.automaticSpellingCorrectionEnabled = NO;
     }
@@ -353,6 +352,10 @@ static NSArray<NSURL *> *installedApps(void) {
     [self.window makeKeyAndOrderFront:nil];
     [self.window makeFirstResponder:self.search];
     if (self.search.currentEditor == self.editor) {
+        self.editor.selectedTextAttributes = @{
+            NSBackgroundColorAttributeName:config.selectionBackground,
+            NSForegroundColorAttributeName:config.selectionColor
+        };
         self.editor.textContainerInset = NSZeroSize;
         self.editor.textContainer.lineFragmentPadding = 0;
         [self.editor invalidateTextContainerOrigin];
@@ -392,7 +395,7 @@ static NSArray<NSURL *> *installedApps(void) {
     if (!self.filtered.count) return;
     self.selected = MAX(0, MIN((NSInteger)self.filtered.count - 1, self.selected + step));
     if (self.selected < (NSInteger)self.firstVisible) self.firstVisible = self.selected;
-    if (self.selected >= (NSInteger)self.firstVisible + VisibleRows) {
+    if (self.selected >= (NSInteger)self.firstVisible + (NSInteger)VisibleRows) {
         self.firstVisible = self.selected - VisibleRows + 1;
     }
     [self renderResults];
@@ -445,7 +448,18 @@ static NSArray<NSURL *> *installedApps(void) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        if (argc > 1 && strcmp(argv[1], "--test") == 0) {
+        BOOL test = NO, smokeTest = NO;
+        NSString *configPath = nil;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--test") == 0) test = YES;
+            else if (strcmp(argv[i], "--smoke-test") == 0) smokeTest = YES;
+            else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) configPath = @(argv[++i]).stringByExpandingTildeInPath;
+            else {
+                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--test | --smoke-test]\n");
+                return 2;
+            }
+        }
+        if (test) {
             assert(matches(@"", @"Safari"));
             assert(matches(@"sfr", @"Safari"));
             assert(matches(@"NCM", @"Nimble Commander"));
@@ -459,7 +473,8 @@ int main(int argc, const char *argv[]) {
         NSApplication *app = NSApplication.sharedApplication;
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
         Launcher *launcher = [Launcher new];
-        launcher.smokeTest = argc > 1 && strcmp(argv[1], "--smoke-test") == 0;
+        launcher.smokeTest = smokeTest;
+        launcher.configPath = configPath ?: (smokeTest ? nil : LauncherConfig.defaultPath);
         app.delegate = launcher;
         [app run];
     }

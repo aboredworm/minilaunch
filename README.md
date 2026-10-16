@@ -30,4 +30,15 @@ For AeroSpace, add this under `[mode.main.binding]` and run `aerospace reload-co
 alt-u = 'exec-and-forget ~/.local/share/minilaunch/toggle.sh'
 ```
 
-Bundled font: Noto Sans Mono ExtraCondensed Black, licensed under the [SIL Open Font License](assets/OFL.txt).
+## Styling
+
+Copy [`config.example`](config.example) to `~/.config/minilaunch/config` and edit it. Changes apply the next time you open the launcher. `$XDG_CONFIG_HOME/minilaunch/config` is used if set to an absolute path.
+
+```ini
+background-color = #282828
+text-color = #d4be98
+font = Menlo-Bold
+font-size = 18
+```
+
+Defaults are gray and white with system monospace. Fonts must be installed on your Mac; none are bundled. The example file lists spacing, position, and selection options. Unknown settings and invalid values are ignored with a warning.

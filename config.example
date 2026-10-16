@@ -1,0 +1,19 @@
+background-color = #282828
+text-color = #ffffff
+background-opacity = 0.8
+
+# Selection colors default to inverted text/background colors.
+# selection-background = #ffffff
+# selection-color = #282828
+
+# Use an installed font name, or system for bold system monospace.
+font = system
+font-size = 18
+
+padding = 4
+result-spacing = 15
+visible-rows = 7
+
+# Percentages from the left and top of the screen. Clamped to fit.
+x-position = 40
+y-position = 35
