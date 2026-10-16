@@ -46,6 +46,6 @@ Defaults are gray and white with system monospace. Fonts must be installed on yo
 
 ## Demo styles
 
-Option+Shift+U opens the next style each time: Default, Warm, Electric (cyan/pink, upper-left), then Paper (ivory/green, lower-right with a serif font). Close with Escape or the same shortcut. Your normal config is unchanged.
+Option+Shift+U opens the next style each time: Default, Warm, Electric (cyan/pink, upper-left), then Paper (off-white, sand selection, Baskerville). Close with Escape or the same shortcut. Your normal config is unchanged.
 
 Presets live in [`styles/`](styles). Run `./demo-toggle.sh --reset` to start again from Default.
