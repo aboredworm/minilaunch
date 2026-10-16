@@ -21,7 +21,7 @@ A borderless, screen-sized overlay dims the current main display. Styling follow
 
 There are no window decorations, input borders, list backgrounds, or scrollbars. The macOS menu bar is unchanged. Arrow keys move through all results beyond the seven visible rows.
 
-Type to fuzzy-filter app names. Use Up/Down and Enter to launch, or double-click a result. Escape quits the process. `./toggle.sh` starts the launcher when absent and terminates its process when present. Nothing runs in the background after dismissal or launching an app. Opening the bundle directly only shows it; macOS reopen events do not dismiss it.
+Type to fuzzy-filter app names. The query uses a steady block cursor with no blinking. Use Up/Down and Enter to launch, or double-click a result. Ctrl+U clears the entire query, including text after the cursor. Ctrl+W deletes the previous word using macOS word boundaries, or deletes the current text selection. These are editing shortcuts; there is no modal Vim mode. Normal typing, selection, and Backspace remain native. Escape quits the process. `./toggle.sh` starts the launcher when absent and terminates its process when present. Nothing runs in the background after dismissal or launching an app. Opening the bundle directly only shows it; macOS reopen events do not dismiss it.
 
 The current AeroSpace configuration opens this bundle with Option+U:
 
@@ -41,7 +41,7 @@ build/MiniLaunch.app/Contents/MacOS/MiniLaunch --test
 build/MiniLaunch.app/Contents/MacOS/MiniLaunch --smoke-test
 ```
 
-History tests use temporary files to check frequency ordering, alphabetical ties, empty defaults, persistence, invalid data, overflow, and write failures. The expected write-failure check prints a warning. The smoke test uses an isolated history and fixture app list to check the borderless overlay, screen coverage, Tofi positioning, font size, keyboard focus, discovery, filtering, seven-row viewport navigation, mouse selection, and empty defaults/results. Set `MINILAUNCH_PREVIEW=/tmp/minilaunch-preview.png` when running it to save a preview of the selector without capturing the desktop. Launching a result can be checked interactively with Enter.
+History tests use temporary files to check frequency ordering, alphabetical ties, empty defaults, persistence, invalid data, overflow, and write failures. The expected write-failure check prints a warning. The smoke test uses an isolated history and fixture app list to check the borderless overlay, screen coverage, Tofi positioning, font size, keyboard focus, discovery, filtering, seven-row viewport navigation, mouse selection, empty defaults/results, block-cursor geometry, Ctrl+U/Ctrl+W editing, Unicode text, selection deletion, and Backspace. Set `MINILAUNCH_PREVIEW=/tmp/minilaunch-preview.png` when running it to save a preview of the selector without capturing the desktop. Launching a result can be checked interactively with Enter.
 
 To check the AeroSpace toggle, press Option+U twice. The first press opens the overlay; the second dismisses it and exits the process. Run `tests/toggle.sh` with the launcher closed to check three cycles through AeroSpace, including that the first press produces an active, screen-sized window that stays visible for three seconds. This requires AeroSpace and the binding above.
 

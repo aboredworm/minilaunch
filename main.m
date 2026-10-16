@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <CoreText/CoreText.h>
 #import "History.h"
+#import "QueryEditor.h"
 #include <assert.h>
 #include <math.h>
 
@@ -52,6 +53,15 @@ static BOOL matches(NSString *query, NSString *name) {
         i = NSMaxRange(character);
     }
     return YES;
+}
+
+static void sendControlKey(QueryEditor *editor, NSString *key) {
+    NSString *character = [key isEqualToString:@"u"] ? @"\x15" : @"\x17";
+    NSEvent *event = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint
+        modifierFlags:NSEventModifierFlagControl timestamp:0 windowNumber:editor.window.windowNumber
+        context:nil characters:character charactersIgnoringModifiers:key isARepeat:NO
+        keyCode:[key isEqualToString:@"u"] ? 32 : 13];
+    [editor keyDown:event];
 }
 
 static NSArray<NSURL *> *installedApps(void) {
@@ -126,7 +136,7 @@ static NSArray<NSURL *> *installedApps(void) {
 @property NSWindow *window;
 @property NSView *selector;
 @property NSTextField *search;
-@property NSTextView *editor;
+@property QueryEditor *editor;
 @property ResultsView *results;
 @property NSArray<NSURL *> *apps;
 @property NSArray<NSURL *> *filtered;
@@ -231,6 +241,8 @@ static NSArray<NSURL *> *installedApps(void) {
             ok &= self.results.names.count == VisibleRows;
             const char *preview = getenv("MINILAUNCH_PREVIEW");
             if (preview) {
+                [self.editor setSelectedRange:NSMakeRange(MIN(3, self.editor.string.length), 0)];
+                self.results.needsDisplay = YES;
                 NSBitmapImageRep *image = [self.selector bitmapImageRepForCachingDisplayInRect:self.selector.bounds];
                 [self.selector cacheDisplayInRect:self.selector.bounds toBitmapImageRep:image];
                 NSData *png = [image representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
@@ -258,6 +270,38 @@ static NSArray<NSURL *> *installedApps(void) {
             [self updateResults];
             ok &= self.filtered.count == 0 && self.selected == -1 && self.results.names.count == 0;
             [self launchSelected:nil];
+            [self.editor insertText:@"Example 09" replacementRange:NSMakeRange(0, self.editor.string.length)];
+            ok &= [self.search.stringValue isEqualToString:@"Example 09"] && self.filtered.count == 1;
+            sendControlKey(self.editor, @"w");
+            ok &= [self.search.stringValue isEqualToString:@"Example "] && self.filtered.count == 10;
+            [self.editor setSelectedRange:NSMakeRange(2, 0)];
+            sendControlKey(self.editor, @"u");
+            ok &= self.search.stringValue.length == 0 && self.filtered.count == 0;
+            sendControlKey(self.editor, @"w");
+            sendControlKey(self.editor, @"u");
+            ok &= self.editor.string.length == 0;
+            [self.editor insertText:@"café world" replacementRange:NSMakeRange(0, self.editor.string.length)];
+            sendControlKey(self.editor, @"w");
+            ok &= [self.editor.string isEqualToString:@"café "];
+            [self.editor setSelectedRange:NSMakeRange(0, 4)];
+            ok &= NSIsEmptyRect(self.editor.blockCursorRect);
+            sendControlKey(self.editor, @"w");
+            ok &= [self.editor.string isEqualToString:@" "];
+            [self.editor insertText:@"one two three" replacementRange:NSMakeRange(0, self.editor.string.length)];
+            [self.editor setSelectedRange:NSMakeRange(7, 0)];
+            sendControlKey(self.editor, @"w");
+            ok &= [self.editor.string isEqualToString:@"one  three"];
+            sendControlKey(self.editor, @"u");
+            [self.editor insertText:@"abc" replacementRange:NSMakeRange(0, self.editor.string.length)];
+            [self.editor deleteBackward:nil];
+            ok &= [self.search.stringValue isEqualToString:@"ab"];
+            sendControlKey(self.editor, @"\x17");
+            ok &= self.search.stringValue.length == 0;
+            NSRect caret = self.editor.blockCursorRect;
+            ok &= !NSIsEmptyRect(caret) && caret.size.width >= 5;
+            [self.editor drawInsertionPointInRect:caret color:textColor() turnedOn:NO];
+            [self.editor updateInsertionPointStateAndRestartTimer:YES];
+            ok &= NSEqualRects(caret, self.editor.blockCursorRect);
             self.apps = installed;
             self.search.stringValue = @"";
             [self updateResults];
@@ -272,7 +316,9 @@ static NSArray<NSURL *> *installedApps(void) {
 - (id)windowWillReturnFieldEditor:(NSWindow *)window toObject:(id)object {
     if (object != self.search) return nil;
     if (!self.editor) {
-        self.editor = [NSTextView new];
+        self.editor = [QueryEditor new];
+        self.editor.font = launcherFont();
+        self.editor.blockTextColor = backgroundColor();
         self.editor.fieldEditor = YES;
         self.editor.drawsBackground = NO;
         self.editor.richText = NO;
