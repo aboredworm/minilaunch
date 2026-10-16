@@ -36,7 +36,7 @@ static NSArray<NSURL *> *installedApps(void) {
     }];
 }
 
-@interface LauncherWindow : NSPanel
+@interface LauncherWindow : NSWindow
 @end
 
 @implementation LauncherWindow
@@ -134,11 +134,6 @@ static NSArray<NSURL *> *installedApps(void) {
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)app hasVisibleWindows:(BOOL)visible {
-    if (self.window.isVisible) {
-        [self.window orderOut:nil];
-        [app terminate:nil];
-        return NO;
-    }
     [self show];
     return YES;
 }
