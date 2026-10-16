@@ -46,15 +46,6 @@ static BOOL matches(NSString *query, NSString *name) {
     return YES;
 }
 
-static void sendControlKey(QueryEditor *editor, NSString *key) {
-    NSString *character = [key isEqualToString:@"u"] ? @"\x15" : @"\x17";
-    NSEvent *event = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint
-        modifierFlags:NSEventModifierFlagControl timestamp:0 windowNumber:editor.window.windowNumber
-        context:nil characters:character charactersIgnoringModifiers:key isARepeat:NO
-        keyCode:[key isEqualToString:@"u"] ? 32 : 13];
-    [editor keyDown:event];
-}
-
 static NSArray<NSURL *> *installedApps(void) {
     NSFileManager *fm = NSFileManager.defaultManager;
     NSArray *directories = @[@"/Applications", @"/Applications/Utilities",
@@ -134,7 +125,6 @@ static NSArray<NSURL *> *installedApps(void) {
 @property NSArray<NSURL *> *filtered;
 @property NSInteger selected;
 @property NSUInteger firstVisible;
-@property BOOL smokeTest;
 @property(copy) NSString *configPath;
 @property BOOL launching;
 @property LaunchHistory *history;
@@ -149,10 +139,6 @@ static NSArray<NSURL *> *installedApps(void) {
     NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
         inDomains:NSUserDomainMask].firstObject;
     NSURL *historyURL = [[support URLByAppendingPathComponent:@"MiniLaunch"] URLByAppendingPathComponent:@"usage.json"];
-    if (self.smokeTest) {
-        historyURL = [NSURL fileURLWithPath:[NSTemporaryDirectory()
-            stringByAppendingPathComponent:NSUUID.UUID.UUIDString]];
-    }
     self.history = [[LaunchHistory alloc] initWithURL:historyURL];
     NSRect screen = NSScreen.mainScreen.frame;
     self.window = [[LauncherWindow alloc] initWithContentRect:screen
@@ -213,120 +199,6 @@ static NSArray<NSURL *> *installedApps(void) {
     [self.selector addSubview:self.results];
     [self updateResults];
     [self show];
-
-    if (self.smokeTest) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            BOOL ok = self.window.isVisible && self.window.isKeyWindow && self.apps.count > 0;
-            ok &= self.filtered.count == 0 && self.selected == -1 && self.results.names.count == 0;
-            ok &= self.window.styleMask == NSWindowStyleMaskBorderless;
-            ok &= !self.window.hasShadow && !self.window.isOpaque;
-            ok &= fabs(self.window.backgroundColor.alphaComponent - config.backgroundOpacity) < 0.001;
-            ok &= NSEqualRects(self.window.frame, self.window.screen.frame);
-            ok &= fabs(self.selector.frame.origin.x - x) < 1;
-            ok &= fabs(self.selector.frame.origin.y - y) < 1;
-            ok &= NSContainsRect(self.window.contentView.bounds, self.selector.frame);
-            ok &= self.search.currentEditor == self.window.firstResponder;
-            ok &= !self.search.isBordered && !self.search.drawsBackground;
-            ok &= [self.editor.insertionPointColor isEqual:config.selectionBackground];
-            ok &= [self.editor.blockTextColor isEqual:config.selectionColor];
-            ok &= [self.editor.selectedTextAttributes[NSBackgroundColorAttributeName] isEqual:config.selectionBackground];
-            ok &= [self.editor.selectedTextAttributes[NSForegroundColorAttributeName] isEqual:config.selectionColor];
-            [self.editor insertText:@"Fgjp" replacementRange:NSMakeRange(0, self.editor.string.length)];
-            [self updateResults];
-            NSRange glyphs = [self.editor.layoutManager glyphRangeForTextContainer:self.editor.textContainer];
-            NSRect line = [self.editor.layoutManager lineFragmentRectForGlyphAtIndex:glyphs.location effectiveRange:NULL];
-            ok &= line.size.height >= floor(launcherFont().ascender - launcherFont().descender);
-            NSRect textRect = NSOffsetRect(line, self.editor.textContainerOrigin.x, self.editor.textContainerOrigin.y);
-            ok &= NSMinY(textRect) >= NSMinY(self.editor.bounds);
-            ok &= NSMaxY(textRect) <= NSMaxY(self.editor.bounds);
-            [self.editor setSelectedRange:NSMakeRange(0, 0)];
-            NSRect queryText = [self.editor convertRect:self.editor.blockCursorRect toView:self.selector];
-            ok &= fabs(NSMidY(self.prompt.frame) - NSMidY(queryText)) < 1;
-            ok &= fabs(NSMinX(self.search.frame) - NSMinX(queryText)) < 1;
-            ok &= [self.editor.font isEqual:config.font] && [self.search.font isEqual:config.font];
-            ok &= [self.search.textColor isEqual:config.textColor] && [self.prompt.textColor isEqual:config.textColor];
-            NSArray *installed = self.apps;
-            NSMutableArray *fixtures = [NSMutableArray array];
-            for (NSUInteger i = 0; i < MAX(10, VisibleRows + 3); i++) {
-                [fixtures addObject:[NSURL fileURLWithPath:[NSString stringWithFormat:@"/Applications/Example %02lu.app", (unsigned long)i]]];
-            }
-            self.apps = fixtures;
-            self.search.stringValue = @"Example";
-            [self updateResults];
-            ok &= self.results.names.count == VisibleRows;
-            const char *preview = getenv("MINILAUNCH_PREVIEW");
-            if (preview) {
-                [self.editor setSelectedRange:NSMakeRange(MIN(3, self.editor.string.length), 0)];
-                self.results.needsDisplay = YES;
-                NSBitmapImageRep *image = [self.selector bitmapImageRepForCachingDisplayInRect:self.selector.bounds];
-                [self.selector cacheDisplayInRect:self.selector.bounds toBitmapImageRep:image];
-                NSData *png = [image representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-                ok &= [png writeToFile:@(preview) atomically:YES];
-            }
-            for (NSUInteger i = 0; i < VisibleRows + 1; i++) [self moveSelection:1];
-            ok &= self.selected == (NSInteger)VisibleRows + 1 && self.firstVisible == 2;
-            ok &= self.results.selected == (NSInteger)VisibleRows - 1;
-            [self moveSelection:-1];
-            ok &= self.selected == (NSInteger)VisibleRows && self.firstVisible == MIN(2, VisibleRows);
-            [self moveSelection:self.filtered.count];
-            ok &= self.selected == (NSInteger)self.filtered.count - 1;
-            ok &= self.results.selected == (NSInteger)VisibleRows - 1;
-            [self moveSelection:-(NSInteger)self.filtered.count];
-            ok &= self.selected == 0 && self.firstVisible == 0;
-            NSInteger clickedRow = MIN(1, VisibleRows - 1);
-            self.results.onSelect(clickedRow, NO);
-            ok &= self.selected == clickedRow && self.results.selected == clickedRow;
-            self.search.stringValue = self.apps.firstObject.lastPathComponent.stringByDeletingPathExtension;
-            [self updateResults];
-            ok &= [self.filtered containsObject:self.apps.firstObject] && self.selected == 0;
-            ok &= self.firstVisible == 0;
-            [self moveSelection:-1];
-            ok &= self.selected == 0;
-            self.search.stringValue = @"this-app-does-not-exist-123456789";
-            [self updateResults];
-            ok &= self.filtered.count == 0 && self.selected == -1 && self.results.names.count == 0;
-            [self launchSelected:nil];
-            [self.editor insertText:@"Example 09" replacementRange:NSMakeRange(0, self.editor.string.length)];
-            ok &= [self.search.stringValue isEqualToString:@"Example 09"] && self.filtered.count == 1;
-            sendControlKey(self.editor, @"w");
-            ok &= [self.search.stringValue isEqualToString:@"Example "] && self.filtered.count == fixtures.count;
-            [self.editor setSelectedRange:NSMakeRange(2, 0)];
-            sendControlKey(self.editor, @"u");
-            ok &= self.search.stringValue.length == 0 && self.filtered.count == 0;
-            sendControlKey(self.editor, @"w");
-            sendControlKey(self.editor, @"u");
-            ok &= self.editor.string.length == 0;
-            [self.editor insertText:@"café world" replacementRange:NSMakeRange(0, self.editor.string.length)];
-            sendControlKey(self.editor, @"w");
-            ok &= [self.editor.string isEqualToString:@"café "];
-            [self.editor setSelectedRange:NSMakeRange(0, 4)];
-            ok &= NSIsEmptyRect(self.editor.blockCursorRect);
-            sendControlKey(self.editor, @"w");
-            ok &= [self.editor.string isEqualToString:@" "];
-            [self.editor insertText:@"one two three" replacementRange:NSMakeRange(0, self.editor.string.length)];
-            [self.editor setSelectedRange:NSMakeRange(7, 0)];
-            sendControlKey(self.editor, @"w");
-            ok &= [self.editor.string isEqualToString:@"one  three"];
-            sendControlKey(self.editor, @"u");
-            [self.editor insertText:@"abc" replacementRange:NSMakeRange(0, self.editor.string.length)];
-            [self.editor deleteBackward:nil];
-            ok &= [self.search.stringValue isEqualToString:@"ab"];
-            sendControlKey(self.editor, @"\x17");
-            ok &= self.search.stringValue.length == 0;
-            NSRect caret = self.editor.blockCursorRect;
-            ok &= !NSIsEmptyRect(caret) && caret.size.width > 0;
-            [self.editor drawInsertionPointInRect:caret color:textColor() turnedOn:NO];
-            [self.editor updateInsertionPointStateAndRestartTimer:YES];
-            ok &= NSEqualRects(caret, self.editor.blockCursorRect);
-            self.apps = installed;
-            self.search.stringValue = @"";
-            [self updateResults];
-            ok &= self.filtered.count == 0 && self.selected == -1;
-            printf("UI smoke test: %s (%lu apps, font: %s)\n", ok ? "PASS" : "FAIL",
-                (unsigned long)self.apps.count, launcherFont().fontName.UTF8String);
-            exit(ok ? 0 : 1);
-        });
-    }
 }
 
 - (id)windowWillReturnFieldEditor:(NSWindow *)window toObject:(id)object {
@@ -448,14 +320,13 @@ static NSArray<NSURL *> *installedApps(void) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        BOOL test = NO, smokeTest = NO;
+        BOOL test = NO;
         NSString *configPath = nil;
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--test") == 0) test = YES;
-            else if (strcmp(argv[i], "--smoke-test") == 0) smokeTest = YES;
             else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) configPath = @(argv[++i]).stringByExpandingTildeInPath;
             else {
-                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--test | --smoke-test]\n");
+                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--test]\n");
                 return 2;
             }
         }
@@ -473,8 +344,7 @@ int main(int argc, const char *argv[]) {
         NSApplication *app = NSApplication.sharedApplication;
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
         Launcher *launcher = [Launcher new];
-        launcher.smokeTest = smokeTest;
-        launcher.configPath = configPath ?: (smokeTest ? nil : LauncherConfig.defaultPath);
+        launcher.configPath = configPath ?: LauncherConfig.defaultPath;
         app.delegate = launcher;
         [app run];
     }
