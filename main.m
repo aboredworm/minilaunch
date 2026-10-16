@@ -118,15 +118,10 @@ static NSArray<NSURL *> *installedApps(void) {
 @end
 
 @implementation Launcher
-- (void)applicationDidFinishLaunching:(NSNotification *)notification {
+- (void)prepareOverlay {
     config = [[LauncherConfig alloc] initWithContentsOfFile:self.configPath];
     Padding = config.padding;
     ResultSpacing = config.resultSpacing;
-    self.apps = installedApps();
-    NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
-        inDomains:NSUserDomainMask].firstObject;
-    NSURL *historyURL = [[support URLByAppendingPathComponent:@"MiniLaunch"] URLByAppendingPathComponent:@"usage.json"];
-    self.history = [[LaunchHistory alloc] initWithURL:historyURL];
     NSRect screen = NSScreen.mainScreen.frame;
     self.window = [[LauncherWindow alloc] initWithContentRect:screen
         styleMask:NSWindowStyleMaskBorderless
@@ -140,7 +135,22 @@ static NSArray<NSURL *> *installedApps(void) {
     self.window.level = NSFloatingWindowLevel;
     self.window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
         NSWindowCollectionBehaviorFullScreenAuxiliary;
+    self.window.ignoresMouseEvents = YES;
+    [self.window orderFrontRegardless];
+    [self.window displayIfNeeded];
+}
 
+- (void)applicationDidFinishLaunching:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{ [self buildInterface]; });
+}
+
+- (void)buildInterface {
+    self.apps = installedApps();
+    NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+        inDomains:NSUserDomainMask].firstObject;
+    NSURL *historyURL = [[support URLByAppendingPathComponent:@"MiniLaunch"] URLByAppendingPathComponent:@"usage.json"];
+    self.history = [[LaunchHistory alloc] initWithURL:historyURL];
+    NSRect screen = self.window.frame;
     CGFloat minimumWidth = ceil([@">  MMMM" sizeWithAttributes:@{NSFontAttributeName:launcherFont()}].width) + Padding * 2;
     CGFloat x = MIN(floor(screen.size.width * config.xPosition / 100), MAX(0, screen.size.width - minimumWidth - 16));
     CGFloat width = screen.size.width - x - 16;
@@ -207,6 +217,8 @@ static NSArray<NSURL *> *installedApps(void) {
 }
 
 - (void)show {
+    if (!self.search) return;
+    self.window.ignoresMouseEvents = NO;
     [NSApp activateIgnoringOtherApps:YES];
     [self.window makeKeyAndOrderFront:nil];
     [self.window makeFirstResponder:self.search];
@@ -350,6 +362,7 @@ int main(int argc, const char *argv[]) {
         Launcher *launcher = [Launcher new];
         launcher.configPath = configPath ?: LauncherConfig.defaultPath;
         app.delegate = launcher;
+        [launcher prepareOverlay];
         [app run];
     }
     return 0;
