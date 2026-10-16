@@ -16,9 +16,9 @@ for cycle in 1 2 3; do
         sleep 0.1
     done
     [[ -n "$pid" ]]
-    build/check-window "$pid" 2>/dev/null
+    build/check-window "$pid"
     sleep 3
-    build/check-window "$pid" 2>/dev/null
+    build/check-window "$pid"
     printf 'Cycle %s: first press opened an active overlay that stayed visible.\n' "$cycle"
     aerospace trigger-binding alt-u --mode main
     for ((attempt=0; attempt<100; attempt++)); do

@@ -1,9 +1,11 @@
 #import <AppKit/AppKit.h>
 #import <CoreText/CoreText.h>
+#import "History.h"
 #include <assert.h>
 #include <math.h>
 
 enum { VisibleRows = 7 };
+static const CGFloat FontSize = 18;
 static const CGFloat Padding = 4;
 static const CGFloat ResultSpacing = 15;
 
@@ -21,9 +23,9 @@ static NSFont *launcherFont(void) {
     dispatch_once(&once, ^{
         NSURL *url = [NSBundle.mainBundle URLForResource:@"NotoSansMono-ExtraCondensedBlack" withExtension:@"ttf"];
         if (url) CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, NULL);
-        font = [NSFont fontWithName:@"NotoSansMono-ExtraCondensedBlack" size:16]
-            ?: [NSFont fontWithName:@"FiraMonoNFM-Bold" size:16]
-            ?: [NSFont monospacedSystemFontOfSize:16 weight:NSFontWeightBold];
+        font = [NSFont fontWithName:@"NotoSansMono-ExtraCondensedBlack" size:FontSize]
+            ?: [NSFont fontWithName:@"FiraMonoNFM-Bold" size:FontSize]
+            ?: [NSFont monospacedSystemFontOfSize:FontSize weight:NSFontWeightBold];
     });
     return font;
 }
@@ -131,11 +133,21 @@ static NSArray<NSURL *> *installedApps(void) {
 @property NSInteger selected;
 @property NSUInteger firstVisible;
 @property BOOL smokeTest;
+@property BOOL launching;
+@property LaunchHistory *history;
 @end
 
 @implementation Launcher
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     self.apps = installedApps();
+    NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+        inDomains:NSUserDomainMask].firstObject;
+    NSURL *historyURL = [[support URLByAppendingPathComponent:@"MiniLaunch"] URLByAppendingPathComponent:@"usage.json"];
+    if (self.smokeTest) {
+        historyURL = [NSURL fileURLWithPath:[NSTemporaryDirectory()
+            stringByAppendingPathComponent:NSUUID.UUID.UUIDString]];
+    }
+    self.history = [[LaunchHistory alloc] initWithURL:historyURL];
     NSRect screen = NSScreen.mainScreen.frame;
     self.window = [[LauncherWindow alloc] initWithContentRect:screen
         styleMask:NSWindowStyleMaskBorderless
@@ -195,7 +207,8 @@ static NSArray<NSURL *> *installedApps(void) {
 
     if (self.smokeTest) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            BOOL ok = self.window.isVisible && self.window.isKeyWindow && self.filtered.count > 0;
+            BOOL ok = self.window.isVisible && self.window.isKeyWindow && self.apps.count > 0;
+            ok &= self.filtered.count == 0 && self.selected == -1 && self.results.names.count == 0;
             ok &= self.window.styleMask == NSWindowStyleMaskBorderless;
             ok &= !self.window.hasShadow && !self.window.isOpaque;
             ok &= fabs(self.window.backgroundColor.alphaComponent - 0.8) < 0.001;
@@ -206,7 +219,16 @@ static NSArray<NSURL *> *installedApps(void) {
             ok &= !self.search.isBordered && !self.search.drawsBackground;
             ok &= [self.editor.insertionPointColor isEqual:textColor()];
             ok &= [launcherFont().fontName isEqualToString:@"NotoSansMono-ExtraCondensedBlack"];
-            ok &= self.results.names.count == MIN(VisibleRows, self.filtered.count);
+            ok &= launcherFont().pointSize == FontSize;
+            NSArray *installed = self.apps;
+            NSMutableArray *fixtures = [NSMutableArray array];
+            for (int i = 0; i < 10; i++) {
+                [fixtures addObject:[NSURL fileURLWithPath:[NSString stringWithFormat:@"/Applications/Example %02d.app", i]]];
+            }
+            self.apps = fixtures;
+            self.search.stringValue = @"Example";
+            [self updateResults];
+            ok &= self.results.names.count == VisibleRows;
             const char *preview = getenv("MINILAUNCH_PREVIEW");
             if (preview) {
                 NSBitmapImageRep *image = [self.selector bitmapImageRepForCachingDisplayInRect:self.selector.bounds];
@@ -236,10 +258,12 @@ static NSArray<NSURL *> *installedApps(void) {
             [self updateResults];
             ok &= self.filtered.count == 0 && self.selected == -1 && self.results.names.count == 0;
             [self launchSelected:nil];
+            self.apps = installed;
             self.search.stringValue = @"";
             [self updateResults];
+            ok &= self.filtered.count == 0 && self.selected == -1;
             printf("UI smoke test: %s (%lu apps, font: %s)\n", ok ? "PASS" : "FAIL",
-                (unsigned long)self.filtered.count, launcherFont().fontName.UTF8String);
+                (unsigned long)self.apps.count, launcherFont().fontName.UTF8String);
             exit(ok ? 0 : 1);
         });
     }
@@ -281,6 +305,7 @@ static NSArray<NSURL *> *installedApps(void) {
         ^BOOL(NSURL *url, NSDictionary *bindings) {
             return matches(query, url.lastPathComponent.stringByDeletingPathExtension);
         }]];
+    self.filtered = rankApps(self.filtered, query, self.history.counts);
     self.selected = self.filtered.count ? 0 : -1;
     self.firstVisible = 0;
     [self renderResults];
@@ -313,17 +338,21 @@ static NSArray<NSURL *> *installedApps(void) {
 
 - (void)launchSelected:(id)sender {
     NSInteger row = self.selected;
-    if (row < 0 || row >= (NSInteger)self.filtered.count) return;
-    [NSWorkspace.sharedWorkspace openApplicationAtURL:self.filtered[row]
+    if (self.launching || row < 0 || row >= (NSInteger)self.filtered.count) return;
+    NSURL *url = self.filtered[row];
+    self.launching = YES;
+    [NSWorkspace.sharedWorkspace openApplicationAtURL:url
         configuration:NSWorkspaceOpenConfiguration.configuration
         completionHandler:^(NSRunningApplication *app, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (error) {
+                    self.launching = NO;
                     NSAlert *alert = [NSAlert new];
                     alert.messageText = @"Could not launch app";
                     alert.informativeText = error.localizedDescription;
                     [alert runModal];
                 } else {
+                    [self.history recordLaunch:url];
                     [NSApp terminate:nil];
                 }
             });

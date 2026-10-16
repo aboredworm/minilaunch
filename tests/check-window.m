@@ -6,7 +6,7 @@ int main(int argc, const char *argv[]) {
         if (argc != 2) return 2;
         pid_t pid = (pid_t)atoi(argv[1]);
         NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-        if (!app.active) return 1;
+        if (!app.active) fprintf(stderr, "MiniLaunch is not the active app.\n");
         NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(
             kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID));
         for (NSDictionary *window in windows) {
@@ -14,9 +14,13 @@ int main(int argc, const char *argv[]) {
             CGRect bounds;
             if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)window[(id)kCGWindowBounds], &bounds)) continue;
             for (NSScreen *screen in NSScreen.screens) {
-                if (CGSizeEqualToSize(bounds.size, screen.frame.size)) return 0;
+                if (CGSizeEqualToSize(bounds.size, screen.frame.size)) {
+                    if (!app.active) fprintf(stderr, "The overlay is still on screen.\n");
+                    return app.active ? 0 : 1;
+                }
             }
         }
+        fprintf(stderr, "No screen-sized MiniLaunch window is on screen.\n");
         return 1;
     }
 }

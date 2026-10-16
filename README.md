@@ -17,7 +17,7 @@ A borderless, screen-sized overlay dims the current main display. Styling follow
 - Inverted selection with 4-point padding around the selected name.
 - `>  ` prompt, seven visible results, and 15-point spacing between rows.
 - Text positioned 40% across and 35% down the display.
-- Bundled Noto Sans Mono ExtraCondensed Black at 16 points.
+- Bundled Noto Sans Mono ExtraCondensed Black at 18 points.
 
 There are no window decorations, input borders, list backgrounds, or scrollbars. The macOS menu bar is unchanged. Arrow keys move through all results beyond the seven visible rows.
 
@@ -29,16 +29,19 @@ The current AeroSpace configuration opens this bundle with Option+U:
 alt-u = 'exec-and-forget ~/.local/share/minilaunch/toggle.sh'
 ```
 
-Apps are read from the standard Applications directories and their Utilities folders when the launcher starts. Search matches characters in order, ignoring case and accents. Results are alphabetical. There is no ranking or recursive app indexing.
+Apps are read from the standard Applications directories and their Utilities folders when the launcher starts. Search matches characters in order, ignoring case and accents. Results are ranked by successful opens through MiniLaunch, most-used first, with alphabetical ties. There is no recursive app indexing.
+
+With an empty query, only previously opened apps are shown. On a fresh history the list is empty; typing still searches all installed apps. Counts persist across restarts in `~/Library/Application Support/MiniLaunch/usage.json`. Opening an already-running app through MiniLaunch also counts. Failed launches, dismissed searches, and apps opened elsewhere do not count. History is local and written atomically after successful launches.
 
 ## Checks
 
 ```sh
+tests/history.sh
 build/MiniLaunch.app/Contents/MacOS/MiniLaunch --test
 build/MiniLaunch.app/Contents/MacOS/MiniLaunch --smoke-test
 ```
 
-The smoke test briefly opens the UI and checks the borderless overlay, screen coverage, Tofi positioning, font, keyboard focus, discovery, filtering, seven-row viewport navigation, mouse selection, and empty results. Set `MINILAUNCH_PREVIEW=/tmp/minilaunch-preview.png` when running it to save a preview of the selector without capturing the desktop. Launching a result can be checked interactively with Enter.
+History tests use temporary files to check frequency ordering, alphabetical ties, empty defaults, persistence, invalid data, overflow, and write failures. The expected write-failure check prints a warning. The smoke test uses an isolated history and fixture app list to check the borderless overlay, screen coverage, Tofi positioning, font size, keyboard focus, discovery, filtering, seven-row viewport navigation, mouse selection, and empty defaults/results. Set `MINILAUNCH_PREVIEW=/tmp/minilaunch-preview.png` when running it to save a preview of the selector without capturing the desktop. Launching a result can be checked interactively with Enter.
 
 To check the AeroSpace toggle, press Option+U twice. The first press opens the overlay; the second dismisses it and exits the process. Run `tests/toggle.sh` with the launcher closed to check three cycles through AeroSpace, including that the first press produces an active, screen-sized window that stays visible for three seconds. This requires AeroSpace and the binding above.
 
