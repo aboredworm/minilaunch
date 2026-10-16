@@ -136,12 +136,25 @@ static NSArray<NSURL *> *installedApps(void) {
     self.window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
         NSWindowCollectionBehaviorFullScreenAuxiliary;
     self.window.ignoresMouseEvents = YES;
+    [NSCursor setHiddenUntilMouseMoves:YES];
     [self.window orderFrontRegardless];
     [self.window displayIfNeeded];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{ [self buildInterface]; });
+}
+
+- (void)applicationDidBecomeActive:(NSNotification *)notification {
+    [NSCursor setHiddenUntilMouseMoves:YES];
+}
+
+- (void)applicationDidResignActive:(NSNotification *)notification {
+    [NSCursor setHiddenUntilMouseMoves:NO];
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification {
+    [NSCursor setHiddenUntilMouseMoves:NO];
 }
 
 - (void)buildInterface {
@@ -231,6 +244,7 @@ static NSArray<NSURL *> *installedApps(void) {
         self.editor.textContainer.lineFragmentPadding = 0;
         [self.editor invalidateTextContainerOrigin];
     }
+    [NSCursor setHiddenUntilMouseMoves:YES];
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)app hasVisibleWindows:(BOOL)visible {
