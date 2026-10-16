@@ -2,6 +2,7 @@
 #import "Config.h"
 #import "History.h"
 #import "QueryEditor.h"
+#import "Search.h"
 #include <assert.h>
 #include <math.h>
 
@@ -29,21 +30,6 @@ static CGFloat textHeight(void) {
 
 static CGFloat rowHeight(void) {
     return textHeight() + Padding * 2;
-}
-
-static BOOL matches(NSString *query, NSString *name) {
-    NSStringCompareOptions options = NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch;
-    NSUInteger start = 0;
-    for (NSUInteger i = 0; i < query.length;) {
-        NSRange character = [query rangeOfComposedCharacterSequenceAtIndex:i];
-        NSRange found = [name rangeOfString:[query substringWithRange:character]
-                                   options:options
-                                     range:NSMakeRange(start, name.length - start)];
-        if (found.location == NSNotFound) return NO;
-        start = NSMaxRange(found);
-        i = NSMaxRange(character);
-    }
-    return YES;
 }
 
 static NSArray<NSURL *> *installedApps(void) {
@@ -242,11 +228,7 @@ static NSArray<NSURL *> *installedApps(void) {
 - (void)updateResults {
     NSString *query = [self.search.stringValue stringByTrimmingCharactersInSet:
         NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    self.filtered = [self.apps filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:
-        ^BOOL(NSURL *url, NSDictionary *bindings) {
-            return matches(query, url.lastPathComponent.stringByDeletingPathExtension);
-        }]];
-    self.filtered = rankApps(self.filtered, query, self.history.counts);
+    self.filtered = rankApps(self.apps, query, self.history.counts);
     self.selected = self.filtered.count ? 0 : -1;
     self.firstVisible = 0;
     [self renderResults];
@@ -331,12 +313,13 @@ int main(int argc, const char *argv[]) {
             }
         }
         if (test) {
-            assert(matches(@"", @"Safari"));
-            assert(matches(@"sfr", @"Safari"));
-            assert(matches(@"NCM", @"Nimble Commander"));
-            assert(matches(@"cafe", @"Café"));
-            assert(!matches(@"fs", @"Safari"));
-            assert(!matches(@"safarix", @"Safari"));
+            assert(fuzzyScore(@"", @"Safari") >= 0);
+            assert(fuzzyScore(@"sfr", @"Safari") >= 0);
+            assert(fuzzyScore(@"NCM", @"Nimble Commander") >= 0);
+            assert(fuzzyScore(@"cafe", @"Café") >= 0);
+            assert(fuzzyScore(@"fs", @"Safari") < 0);
+            assert(fuzzyScore(@"safarix", @"Safari") < 0);
+            assert(fuzzyScore(@"hel", @"Helium") > fuzzyScore(@"hel", @"Archive Utility"));
             assert(installedApps().count > 0);
             puts("Search and app discovery tests passed.");
             return 0;

@@ -23,7 +23,7 @@ int main(void) {
         assert([history recordLaunch:beta]);
         for (int i = 0; i < 3; i++) assert([history recordLaunch:zeta]);
         expectOrder(rankApps(apps, @"", history.counts), @[zeta, beta]);
-        expectOrder(rankApps(apps, @"a", history.counts), @[zeta, beta, alpha]);
+        expectOrder(rankApps(apps, @"a", history.counts), @[alpha, zeta, beta]);
         expectOrder(rankApps(@[alpha, beta], @"", history.counts), @[beta]);
 
         LaunchHistory *loaded = [[LaunchHistory alloc] initWithURL:url];

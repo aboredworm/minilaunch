@@ -1,4 +1,5 @@
 #import "History.h"
+#import "Search.h"
 #include <limits.h>
 
 @interface LaunchHistory ()
@@ -50,11 +51,23 @@
 
 NSArray<NSURL *> *rankApps(NSArray<NSURL *> *apps, NSString *query,
     NSDictionary<NSString *, NSNumber *> *counts) {
-    NSArray *candidates = query.length ? apps : [apps filteredArrayUsingPredicate:
-        [NSPredicate predicateWithBlock:^BOOL(NSURL *url, NSDictionary *bindings) {
-            return [counts[url.path] longLongValue] > 0;
-        }]];
+    NSMutableArray *candidates = [NSMutableArray array];
+    NSMutableDictionary<NSString *, NSNumber *> *scores = [NSMutableDictionary dictionary];
+    for (NSURL *app in apps) {
+        if (query.length) {
+            NSInteger score = fuzzyScore(query, app.lastPathComponent.stringByDeletingPathExtension);
+            if (score < 0) continue;
+            scores[app.path] = @(score);
+        } else if ([counts[app.path] longLongValue] <= 0) {
+            continue;
+        }
+        [candidates addObject:app];
+    }
     return [candidates sortedArrayUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b) {
+        if (query.length) {
+            NSInteger leftScore = scores[a.path].integerValue, rightScore = scores[b.path].integerValue;
+            if (leftScore != rightScore) return leftScore > rightScore ? NSOrderedAscending : NSOrderedDescending;
+        }
         long long left = [counts[a.path] longLongValue];
         long long right = [counts[b.path] longLongValue];
         if (left != right) return left > right ? NSOrderedAscending : NSOrderedDescending;

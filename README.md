@@ -1,6 +1,6 @@
 # MiniLaunch
 
-A native macOS app launcher with fuzzy search and [Tofi](https://github.com/philj56/tofi)-inspired styling. Ranks apps by how often you launch them. Nothing runs in the background when closed.
+A native macOS app launcher with fuzzy search and [Tofi](https://github.com/philj56/tofi)-inspired styling. Better matches rank first; launch history breaks ties. Nothing runs in the background when closed.
 
 ## Install
 
