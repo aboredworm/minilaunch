@@ -2,7 +2,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 styles=(default warm electric paper)
-binary="$PWD/build/MiniLaunch.app/Contents/MacOS/MiniLaunch"
+binary="$PWD/MiniLaunch.app/Contents/MacOS/MiniLaunch"
+if [[ ! -x "$binary" ]]; then
+    binary="$PWD/build/MiniLaunch.app/Contents/MacOS/MiniLaunch"
+fi
 if [[ "${XDG_CACHE_HOME:-}" == /* ]]; then
     cache="$XDG_CACHE_HOME/minilaunch"
 else

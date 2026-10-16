@@ -82,4 +82,11 @@ if "$fixture/demo-toggle.sh" > "$root/output" 2>&1; then
     exit 1
 fi
 [[ $(< "$state") == 1 ]]
-printf 'Demo tests passed: order, wraparound, close, normal toggle, reset, corrupt state, missing files, paths with spaces.\n'
+mv "$root/warm.conf" "$fixture/styles/warm.conf"
+mv "$fixture/build/MiniLaunch.app" "$fixture/MiniLaunch.app"
+"$fixture/demo-toggle.sh" --reset
+start_style default
+close_style demo-toggle.sh
+start_style warm
+close_style toggle.sh
+printf 'Demo tests passed: order, wraparound, close, normal toggle, reset, corrupt state, missing files, paths with spaces, installed layout.\n'

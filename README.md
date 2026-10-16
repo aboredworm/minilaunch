@@ -7,12 +7,14 @@ A native macOS app launcher with fuzzy search and [Tofi](https://github.com/phil
 Requires macOS 12+ and Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
-mkdir -p ~/.local/share
-git clone https://github.com/aboredworm/minilaunch.git ~/.local/share/minilaunch
-cd ~/.local/share/minilaunch
-./build.sh
-open build/MiniLaunch.app
+mkdir -p ~/projects
+git clone https://github.com/aboredworm/minilaunch.git ~/projects/minilaunch
+cd ~/projects/minilaunch
+./install.sh
+open ~/.local/share/minilaunch/MiniLaunch.app
 ```
+
+Source stays in the checkout. Only the app, scripts, and demo styles are installed in `~/.local/share/minilaunch`. Rerun `./install.sh` to deploy changes; `./build.sh` only builds the development copy.
 
 ## Use
 
