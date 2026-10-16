@@ -10,6 +10,7 @@ cp demo-toggle.sh toggle.sh "$fixture/"
 cp -R styles "$fixture/"
 export XDG_CACHE_HOME="$root/cache"
 export MINILAUNCH_DEMO_TEST_LOG="$root/launched"
+export MINILAUNCH_DEMO_TEST_PID="$root/child.pid"
 state="$XDG_CACHE_HOME/minilaunch/demo-next"
 binary="$fixture/build/MiniLaunch.app/Contents/MacOS/MiniLaunch"
 
@@ -23,8 +24,21 @@ clang -O2 -Wall -Wextra -x c -o "$binary" - <<'C'
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--toggle")) {
+        FILE *pidFile = fopen(getenv("MINILAUNCH_DEMO_TEST_PID"), "r");
+        long pid = 0;
+        if (!pidFile) return 4;
+        int valid = fscanf(pidFile, "%ld", &pid) == 1 && pid > 0;
+        fclose(pidFile);
+        return valid && kill((pid_t)pid, SIGTERM) == 0 ? 0 : 5;
+    }
     if (argc != 3 || strcmp(argv[1], "--config") || access(argv[2], R_OK)) return 2;
+    FILE *pidFile = fopen(getenv("MINILAUNCH_DEMO_TEST_PID"), "w");
+    if (!pidFile) return 4;
+    fprintf(pidFile, "%ld\n", (long)getpid());
+    fclose(pidFile);
     FILE *log = fopen(getenv("MINILAUNCH_DEMO_TEST_LOG"), "w");
     if (!log) return 3;
     fprintf(log, "%s\n", argv[2]);

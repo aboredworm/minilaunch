@@ -26,10 +26,10 @@ An empty search shows previously launched apps. On first use, start typing.
 
 Bind `~/.local/share/minilaunch/toggle.sh` to a shortcut to open or close the launcher.
 
-For AeroSpace, add this under `[mode.main.binding]` and run `aerospace reload-config`:
+For AeroSpace, invoke the app directly under `[mode.main.binding]` and run `aerospace reload-config`:
 
 ```toml
-alt-u = 'exec-and-forget ~/.local/share/minilaunch/toggle.sh'
+alt-u = 'exec-and-forget exec ~/.local/share/minilaunch/MiniLaunch.app/Contents/MacOS/MiniLaunch --toggle'
 alt-shift-u = 'exec-and-forget ~/.local/share/minilaunch/demo-toggle.sh'
 ```
 

@@ -5,6 +5,7 @@
 #import "Search.h"
 #include <assert.h>
 #include <math.h>
+#include <unistd.h>
 
 static LauncherConfig *config;
 static NSUInteger VisibleRows;
@@ -300,15 +301,31 @@ static NSArray<NSURL *> *installedApps(void) {
 }
 @end
 
+static int toggleRunningInstance(void) {
+    NSBundle *bundle = NSBundle.mainBundle;
+    if (!bundle.bundleIdentifier) return 0;
+    NSURL *executable = bundle.executableURL.URLByResolvingSymlinksInPath;
+    BOOL found = NO, success = YES;
+    for (NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:bundle.bundleIdentifier]) {
+        if (app.processIdentifier == getpid() ||
+            ![app.executableURL.URLByResolvingSymlinksInPath isEqual:executable]) continue;
+        found = YES;
+        if (![app terminate]) success = NO;
+    }
+    if (!success) fprintf(stderr, "Could not close the running MiniLaunch.\n");
+    return found ? (success ? 1 : -1) : 0;
+}
+
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        BOOL test = NO;
+        BOOL test = NO, toggle = NO;
         NSString *configPath = nil;
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--test") == 0) test = YES;
+            else if (strcmp(argv[i], "--toggle") == 0) toggle = YES;
             else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) configPath = @(argv[++i]).stringByExpandingTildeInPath;
             else {
-                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--test]\n");
+                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--toggle] [--test]\n");
                 return 2;
             }
         }
@@ -323,6 +340,10 @@ int main(int argc, const char *argv[]) {
             assert(installedApps().count > 0);
             puts("Search and app discovery tests passed.");
             return 0;
+        }
+        if (toggle) {
+            int result = toggleRunningInstance();
+            if (result != 0) return result < 0 ? 1 : 0;
         }
         NSApplication *app = NSApplication.sharedApplication;
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
