@@ -11,7 +11,9 @@ Requires macOS 12+ and the Xcode command-line tools.
 open build/MiniLaunch.app
 ```
 
-Type to fuzzy-filter app names. Use Up/Down and Enter to launch, or double-click a result. Escape or closing the window quits the process. Nothing runs in the background after quitting or launching an app.
+A borderless, screen-sized translucent overlay dims the current main display, with a native search box and app list centered on it. There is no window title bar or shadow. The macOS menu bar is unchanged.
+
+Type to fuzzy-filter app names. Use Up/Down and Enter to launch, or double-click a result. Escape quits the process. Opening the app again while it is visible also quits, so Option+U toggles it open and closed. Nothing runs in the background after dismissal or launching an app.
 
 The current AeroSpace configuration opens this bundle with Option+U:
 
@@ -28,4 +30,6 @@ build/MiniLaunch.app/Contents/MacOS/MiniLaunch --test
 build/MiniLaunch.app/Contents/MacOS/MiniLaunch --smoke-test
 ```
 
-The smoke test briefly opens the UI and checks discovery, filtering, selection, and empty results. Launching a result can be checked interactively with Enter.
+The smoke test briefly opens the UI and checks the borderless overlay, screen coverage, centered selector, keyboard focus, discovery, filtering, selection, and empty results. Launching a result can be checked interactively with Enter.
+
+To check the AeroSpace toggle, press Option+U twice. The first press opens the overlay; the second dismisses it and exits the process. The same check can be triggered with `aerospace trigger-binding alt-u --mode main`.

@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #include <assert.h>
+#include <math.h>
 
 static BOOL matches(NSString *query, NSString *name) {
     NSStringCompareOptions options = NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch;
@@ -35,9 +36,18 @@ static NSArray<NSURL *> *installedApps(void) {
     }];
 }
 
+@interface LauncherWindow : NSPanel
+@end
+
+@implementation LauncherWindow
+- (BOOL)canBecomeKeyWindow { return YES; }
+- (BOOL)canBecomeMainWindow { return YES; }
+@end
+
 @interface Launcher : NSObject <NSApplicationDelegate, NSWindowDelegate,
     NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate>
 @property NSWindow *window;
+@property NSView *selector;
 @property NSTextField *search;
 @property NSTableView *table;
 @property NSArray<NSURL *> *apps;
@@ -48,24 +58,36 @@ static NSArray<NSURL *> *installedApps(void) {
 @implementation Launcher
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     self.apps = installedApps();
-    self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 560, 330)
-        styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+    NSRect screen = NSScreen.mainScreen.frame;
+    self.window = [[LauncherWindow alloc] initWithContentRect:screen
+        styleMask:NSWindowStyleMaskBorderless
         backing:NSBackingStoreBuffered defer:NO];
     self.window.title = @"MiniLaunch";
     self.window.delegate = self;
     self.window.releasedWhenClosed = NO;
-    [self.window center];
+    self.window.opaque = NO;
+    self.window.hasShadow = NO;
+    self.window.backgroundColor = [NSColor colorWithWhite:0 alpha:0.6];
+    self.window.level = NSFloatingWindowLevel;
+    self.window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
+        NSWindowCollectionBehaviorFullScreenAuxiliary;
 
-    self.search = [[NSTextField alloc] initWithFrame:NSMakeRect(16, 286, 528, 28)];
+    CGFloat width = MIN(560, screen.size.width - 32);
+    CGFloat height = MIN(330, screen.size.height - 32);
+    self.selector = [[NSView alloc] initWithFrame:NSMakeRect(
+        (screen.size.width - width) / 2, (screen.size.height - height) / 2, width, height)];
+    [self.window.contentView addSubview:self.selector];
+
+    self.search = [[NSTextField alloc] initWithFrame:NSMakeRect(16, height - 44, width - 32, 28)];
     self.search.placeholderString = @"Search apps…";
     self.search.delegate = self;
-    [self.window.contentView addSubview:self.search];
+    [self.selector addSubview:self.search];
 
-    NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(16, 16, 528, 258)];
+    NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(16, 16, width - 32, height - 72)];
     scroll.hasVerticalScroller = YES;
     self.table = [[NSTableView alloc] initWithFrame:scroll.bounds];
     NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"app"];
-    column.width = 508;
+    column.width = width - 52;
     [self.table addTableColumn:column];
     self.table.headerView = nil;
     self.table.rowHeight = 30;
@@ -74,13 +96,20 @@ static NSArray<NSURL *> *installedApps(void) {
     self.table.target = self;
     self.table.doubleAction = @selector(launchSelected:);
     scroll.documentView = self.table;
-    [self.window.contentView addSubview:scroll];
+    [self.selector addSubview:scroll];
     [self updateResults];
     [self show];
 
     if (self.smokeTest) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             BOOL ok = self.window.isVisible && self.window.isKeyWindow && self.table.numberOfRows > 0;
+            ok &= self.window.styleMask == NSWindowStyleMaskBorderless;
+            ok &= !self.window.hasShadow && !self.window.isOpaque;
+            ok &= self.window.backgroundColor.alphaComponent > 0 && self.window.backgroundColor.alphaComponent < 1;
+            ok &= NSEqualRects(self.window.frame, self.window.screen.frame);
+            ok &= fabs(NSMidX(self.selector.frame) - NSMidX(self.window.contentView.bounds)) < 1;
+            ok &= fabs(NSMidY(self.selector.frame) - NSMidY(self.window.contentView.bounds)) < 1;
+            ok &= self.search.currentEditor == self.window.firstResponder;
             self.search.stringValue = self.apps.firstObject.lastPathComponent.stringByDeletingPathExtension;
             [self updateResults];
             ok &= [self.filtered containsObject:self.apps.firstObject] && self.table.selectedRow == 0;
@@ -105,6 +134,11 @@ static NSArray<NSURL *> *installedApps(void) {
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)app hasVisibleWindows:(BOOL)visible {
+    if (self.window.isVisible) {
+        [self.window orderOut:nil];
+        [app terminate:nil];
+        return NO;
+    }
     [self show];
     return YES;
 }
