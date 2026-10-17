@@ -1,4 +1,5 @@
 /build/
+*-audit.md
 /tests/check-window.m
 /tests/style.sh
 /tests/toggle.sh
