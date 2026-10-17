@@ -1,4 +1,7 @@
 /build/
+/.local/
+/prompt-history/
+.DS_Store
 *-audit.md
 /tests/check-window.m
 /tests/style.sh

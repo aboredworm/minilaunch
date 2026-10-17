@@ -1,6 +1,5 @@
 #import <AppKit/AppKit.h>
 #import "Config.h"
-#import "Demo.h"
 #import "History.h"
 #import "InstanceLock.h"
 #import "QueryEditor.h"
@@ -145,30 +144,13 @@ static NSArray<NSURL *> *installedApps(void) {
         [NSApp terminate:nil];
         return;
     }
-    if ([command isEqualToString:@"reset-demo"]) {
-        NSError *error = nil;
-        if (!resetDemoStyle(demoStateURL(), &error)) {
-            fprintf(stderr, "Could not reset demo styles: %s\n", error.localizedDescription.UTF8String);
-        }
-        return;
-    }
     BOOL visible = self.search ? (self.window.isVisible && !NSApp.isHidden) : self.wantsVisible;
     if ([command isEqualToString:@"hide"] ||
-        (([command isEqualToString:@"toggle"] || [command isEqualToString:@"demo"]) && visible)) {
+        ([command isEqualToString:@"toggle"] && visible)) {
         [self hide];
         return;
     }
-    if ([command isEqualToString:@"demo"]) {
-        NSString *directory = notification.userInfo[@"stylesDirectory"];
-        if (![directory isKindOfClass:NSString.class] || !directory.isAbsolutePath) return;
-        NSError *error = nil;
-        NSString *path = nextDemoStyle(directory, demoStateURL(), &error);
-        if (!path) {
-            fprintf(stderr, "Could not load demo style: %s\n", error.localizedDescription.UTF8String);
-            return;
-        }
-        self.configPath = path;
-    } else if ([command isEqualToString:@"show"] || [command isEqualToString:@"toggle"]) {
+    if ([command isEqualToString:@"show"] || [command isEqualToString:@"toggle"]) {
         NSString *path = notification.userInfo[@"configPath"];
         if (![path isKindOfClass:NSString.class] || !path.isAbsolutePath) return;
         self.configPath = path;
@@ -469,21 +451,16 @@ int main(int argc, const char *argv[]) {
     @autoreleasepool {
         BOOL test = NO;
         NSUInteger commands = 0;
-        NSString *command = @"show", *configPath = nil, *stylesDirectory = nil;
+        NSString *command = @"show", *configPath = nil;
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--test") == 0) test = YES;
             else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) configPath = absolutePath(@(argv[++i]));
-            else if (strcmp(argv[i], "--demo") == 0 && i + 1 < argc) {
-                command = @"demo";
-                stylesDirectory = absolutePath(@(argv[++i]));
-                commands++;
-            } else if (strcmp(argv[i], "--toggle") == 0 || strcmp(argv[i], "--hide") == 0 ||
-                strcmp(argv[i], "--quit") == 0 || strcmp(argv[i], "--background") == 0 ||
-                strcmp(argv[i], "--reset-demo") == 0) {
+            else if (strcmp(argv[i], "--toggle") == 0 || strcmp(argv[i], "--hide") == 0 ||
+                strcmp(argv[i], "--quit") == 0 || strcmp(argv[i], "--background") == 0) {
                 command = [@(argv[i]) substringFromIndex:2];
                 commands++;
             } else {
-                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--toggle | --hide | --quit | --background | --demo DIRECTORY | --reset-demo] [--test]\n");
+                fprintf(stderr, "Usage: MiniLaunch [--config PATH] [--toggle | --hide | --quit | --background] [--test]\n");
                 return 2;
             }
         }
@@ -503,20 +480,16 @@ int main(int argc, const char *argv[]) {
             puts("Search and app discovery tests passed.");
             return 0;
         }
-        NSMutableDictionary *request = [@{@"command":command,
-            @"configPath":configPath ?: LauncherConfig.defaultPath} mutableCopy];
-        if (stylesDirectory) request[@"stylesDirectory"] = stylesDirectory;
+        NSDictionary *request = @{@"command":command,
+            @"configPath":configPath ?: LauncherConfig.defaultPath};
         int sent = sendCommandToInstance(request);
         if (sent != 0) return sent < 0 ? 1 : 0;
-        if ([command isEqualToString:@"reset-demo"]) {
-            NSError *error = nil;
-            if (resetDemoStyle(demoStateURL(), &error)) return 0;
-            fprintf(stderr, "Could not reset demo styles: %s\n", error.localizedDescription.UTF8String);
-            return 1;
-        }
         if ([command isEqualToString:@"hide"] || [command isEqualToString:@"quit"]) return 0;
         NSError *lockError = nil;
-        NSURL *locks = [[demoStateURL() URLByDeletingLastPathComponent] URLByAppendingPathComponent:@"instances" isDirectory:YES];
+        NSString *cache = NSProcessInfo.processInfo.environment[@"XDG_CACHE_HOME"];
+        cache = cache.isAbsolutePath ? [cache stringByAppendingPathComponent:@"minilaunch"] :
+            [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches/MiniLaunch"];
+        NSURL *locks = [[NSURL fileURLWithPath:cache] URLByAppendingPathComponent:@"instances" isDirectory:YES];
         int lockFD = acquireInstanceLock(instancePath(), locks, &lockError);
         if (lockFD < 0) {
             if ([lockError.domain isEqualToString:NSPOSIXErrorDomain] && lockError.code == EWOULDBLOCK) {
@@ -530,14 +503,6 @@ int main(int argc, const char *argv[]) {
                 fprintf(stderr, "Could not start MiniLaunch: %s\n", lockError.localizedDescription.UTF8String);
             }
             return 1;
-        }
-        if ([command isEqualToString:@"demo"]) {
-            NSError *error = nil;
-            configPath = nextDemoStyle(stylesDirectory, demoStateURL(), &error);
-            if (!configPath) {
-                fprintf(stderr, "Could not load demo style: %s\n", error.localizedDescription.UTF8String);
-                return 1;
-            }
         }
         NSApplication *app = NSApplication.sharedApplication;
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];

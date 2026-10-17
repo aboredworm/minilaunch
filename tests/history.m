@@ -1,4 +1,4 @@
-#import "../History.h"
+#import "../src/History.h"
 #include <assert.h>
 #include <limits.h>
 

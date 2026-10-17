@@ -1,4 +1,4 @@
-#import "../InstanceLock.h"
+#import "../src/InstanceLock.h"
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>

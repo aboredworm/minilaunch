@@ -3,7 +3,6 @@ set -eu
 cd "$(dirname "$0")"
 app=build/MiniLaunch.app
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-clang -mmacosx-version-min=12.0 -O2 -Wall -Wextra -Wno-unused-parameter -fobjc-arc main.m Config.m Demo.m History.m InstanceLock.m QueryEditor.m Search.m -framework AppKit -framework CoreText -o "$app/Contents/MacOS/MiniLaunch"
-cp Info.plist "$app/Contents/Info.plist"
-rm -f "$app/Contents/Resources/NotoSansMono-ExtraCondensedBlack.ttf" "$app/Contents/Resources/OFL.txt"
+clang -mmacosx-version-min=12.0 -O2 -Wall -Wextra -Wno-unused-parameter -fobjc-arc src/main.m src/Config.m src/History.m src/InstanceLock.m src/QueryEditor.m src/Search.m -framework AppKit -framework CoreText -o "$app/Contents/MacOS/MiniLaunch"
+cp resources/Info.plist "$app/Contents/Info.plist"
 printf 'Built %s/%s\n' "$PWD" "$app"

@@ -1,5 +1,5 @@
-#import "../Search.h"
-#import "../History.h"
+#import "../src/Search.h"
+#import "../src/History.h"
 #include <assert.h>
 #include <limits.h>
 

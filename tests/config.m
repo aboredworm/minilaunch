@@ -1,4 +1,4 @@
-#import "../Config.h"
+#import "../src/Config.h"
 #include <assert.h>
 #include <math.h>
 

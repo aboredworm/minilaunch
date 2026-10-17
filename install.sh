@@ -26,14 +26,10 @@ cleanup() {
 }
 trap cleanup EXIT
 /usr/bin/ditto build/MiniLaunch.app "$staging/MiniLaunch.app"
-cp toggle.sh demo-toggle.sh quit.sh "$staging/"
-mkdir "$staging/styles"
-cp styles/*.conf "$staging/styles/"
+cp scripts/toggle.sh scripts/quit.sh "$staging/"
 if [[ -e "$destination/MiniLaunch.app" ]]; then
     mv "$destination/MiniLaunch.app" "$staging/previous.app"
 fi
 mv "$staging/MiniLaunch.app" "$destination/MiniLaunch.app"
-/usr/bin/install -m 755 "$staging/toggle.sh" "$staging/demo-toggle.sh" "$staging/quit.sh" "$destination/"
-mkdir -p "$destination/styles"
-cp "$staging/styles/"*.conf "$destination/styles/"
+/usr/bin/install -m 755 "$staging/toggle.sh" "$staging/quit.sh" "$destination/"
 printf 'Installed MiniLaunch in %s\n' "$destination"
