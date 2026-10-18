@@ -2,13 +2,9 @@
 
 A native macOS app launcher with fuzzy search and [Tofi](https://github.com/philj56/tofi)-inspired styling. Better matches rank first; launch history breaks ties. Stays idle between searches for fast reopening.
 
-## Example styles
-
-Default, Warm, Electric, and Paper, shown at normal speed in a looping animation.
-
 <img src="https://github.com/aboredworm/minilaunch/releases/download/v0.1/example-styles.gif" alt="MiniLaunch cycling through four example styles, with Electric positioned in the upper-left" width="640">
 
-[Watch the video](https://github.com/aboredworm/minilaunch/releases/download/v0.1/example-styles.mp4). See [Styling](#styling) to customize your own.
+See [Styling](#styling) to customize your own.
 
 ## Install
 
