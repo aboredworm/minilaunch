@@ -6,6 +6,24 @@ A native macOS app launcher with fuzzy search and [Tofi](https://github.com/phil
 
 Requires macOS 12+ and Xcode Command Line Tools (`xcode-select --install`).
 
+### Homebrew
+
+```sh
+brew install --HEAD aboredworm/tap/minilaunch
+minilaunch --toggle
+```
+
+The formula builds from the `main` branch. Bind `minilaunch --toggle` to your shortcut and use `minilaunch --quit` to quit completely. If your shortcut manager does not load your shell's PATH, use the absolute path printed by `echo "$(brew --prefix)/bin/minilaunch"`.
+
+Quit before upgrading:
+
+```sh
+minilaunch --quit
+brew upgrade --fetch-HEAD aboredworm/tap/minilaunch
+```
+
+### From source
+
 ```sh
 mkdir -p ~/projects
 git clone https://github.com/aboredworm/minilaunch.git ~/projects/minilaunch
@@ -22,13 +40,13 @@ Type an app name, select with Up/Down, and press Enter to launch. Escape hides i
 
 An empty search shows previously launched apps. On first use, start typing.
 
-Hiding or launching an app keeps MiniLaunch ready in the background and clears the query. Run `~/.local/share/minilaunch/quit.sh` to quit completely. The first opening after quitting is a cold launch; no login item is installed.
+Hiding or launching an app keeps MiniLaunch ready in the background and clears the query. Run `minilaunch --quit` for Homebrew installations, or `~/.local/share/minilaunch/quit.sh` for source installations, to quit completely. The first opening after quitting is a cold launch; no login item is installed.
 
 ## Shortcut
 
-Bind `~/.local/share/minilaunch/toggle.sh` to a shortcut to show or hide the launcher.
+For Homebrew, bind `minilaunch --toggle`. For source installations, bind `~/.local/share/minilaunch/toggle.sh` to show or hide the launcher.
 
-For AeroSpace, invoke the app directly under `[mode.main.binding]` and run `aerospace reload-config`:
+For a source installation with AeroSpace, invoke the app directly under `[mode.main.binding]` and run `aerospace reload-config`:
 
 ```toml
 alt-u = 'exec-and-forget exec ~/.local/share/minilaunch/MiniLaunch.app/Contents/MacOS/MiniLaunch --toggle'
