@@ -9,17 +9,17 @@ Requires macOS 12+ and Xcode Command Line Tools (`xcode-select --install`).
 ### Homebrew
 
 ```sh
-brew install --HEAD aboredworm/tap/minilaunch
+brew install aboredworm/tap/minilaunch
 minilaunch --toggle
 ```
 
-The formula builds from the `main` branch. Bind `minilaunch --toggle` to your shortcut and use `minilaunch --quit` to quit completely. If your shortcut manager does not load your shell's PATH, use the absolute path printed by `echo "$(brew --prefix)/bin/minilaunch"`.
+The formula builds the latest source release. To build the development branch instead, use `brew install --HEAD aboredworm/tap/minilaunch`. Bind `minilaunch --toggle` to your shortcut and use `minilaunch --quit` to quit completely. If your shortcut manager does not load your shell's PATH, use the absolute path printed by `echo "$(brew --prefix)/bin/minilaunch"`.
 
 Quit before upgrading:
 
 ```sh
 minilaunch --quit
-brew upgrade --fetch-HEAD aboredworm/tap/minilaunch
+brew upgrade aboredworm/tap/minilaunch
 ```
 
 ### From source
@@ -74,6 +74,8 @@ Defaults are gray and white with system monospace. Fonts must be installed on yo
 ```
 
 The development app is built in `build/MiniLaunch.app`. Use `./scripts/toggle.sh` to show or hide it and `./scripts/quit.sh` to quit.
+
+Release notes are in [CHANGELOG.md](CHANGELOG.md). See [docs/releases.md](docs/releases.md) for source packaging and publishing steps.
 
 ### Layout
 
