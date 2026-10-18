@@ -2,6 +2,33 @@
 
 A native macOS app launcher with fuzzy search and [Tofi](https://github.com/philj56/tofi)-inspired styling. Better matches rank first; launch history breaks ties. Stays idle between searches for fast reopening.
 
+## Example styles
+
+Click a preview to open the video. See [Styling](#styling) to customize your own.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <strong>Default</strong><br>
+      <a href="https://github.com/aboredworm/minilaunch/releases/download/v0.1/default.mp4"><img src="https://github.com/aboredworm/minilaunch/releases/download/v0.1/default.gif" alt="Default style with white text on a dimmed desktop" width="440"></a>
+    </td>
+    <td width="50%" align="center">
+      <strong>Warm</strong><br>
+      <a href="https://github.com/aboredworm/minilaunch/releases/download/v0.1/warm.mp4"><img src="https://github.com/aboredworm/minilaunch/releases/download/v0.1/warm.gif" alt="Warm style with muted gold text and selection" width="440"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <strong>Electric</strong><br>
+      <a href="https://github.com/aboredworm/minilaunch/releases/download/v0.1/electric.mp4"><img src="https://github.com/aboredworm/minilaunch/releases/download/v0.1/electric.gif" alt="Electric style with cyan text and pink selection in the upper left" width="440"></a>
+    </td>
+    <td width="50%" align="center">
+      <strong>Paper</strong><br>
+      <a href="https://github.com/aboredworm/minilaunch/releases/download/v0.1/paper.mp4"><img src="https://github.com/aboredworm/minilaunch/releases/download/v0.1/paper.gif" alt="Paper style with dark serif text on an off-white background" width="440"></a>
+    </td>
+  </tr>
+</table>
+
 ## Install
 
 Requires macOS 12+ and Xcode Command Line Tools (`xcode-select --install`).
