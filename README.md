@@ -4,11 +4,11 @@ A native macOS app launcher with fuzzy search and [Tofi](https://github.com/phil
 
 ## Example styles
 
-Default, Warm, Electric, and Paper, shown at normal speed. Click to open the video.
+Default, Warm, Electric, and Paper, shown at normal speed in a looping animation.
 
-[![MiniLaunch cycling through four example styles, with Electric positioned in the upper-left](https://github.com/aboredworm/minilaunch/releases/download/v0.1/example-styles.gif)](https://github.com/aboredworm/minilaunch/releases/download/v0.1/example-styles.mp4)
+![MiniLaunch cycling through four example styles, with Electric positioned in the upper-left](https://github.com/aboredworm/minilaunch/releases/download/v0.1/example-styles.gif)
 
-See [Styling](#styling) to customize your own.
+[Watch the video](https://github.com/aboredworm/minilaunch/releases/download/v0.1/example-styles.mp4). See [Styling](#styling) to customize your own.
 
 ## Install
 
