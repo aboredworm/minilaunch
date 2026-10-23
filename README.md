@@ -50,11 +50,9 @@ Hiding or launching an app keeps MiniLaunch ready in the background and clears t
 
 For Homebrew, bind `minilaunch --toggle`. For source installations, bind `~/.local/share/minilaunch/toggle.sh` to show or hide the launcher.
 
-For a source installation with AeroSpace, invoke the app directly under `[mode.main.binding]` and run `aerospace reload-config`:
-
+You can launch minilaunch however you'd like. I use AeroSpace to bind it to a shortcut as shown below:
 ```toml
 alt-u = 'exec-and-forget exec ~/.local/share/minilaunch/MiniLaunch.app/Contents/MacOS/MiniLaunch --toggle'
-ctrl-alt-shift-u = 'exec-and-forget exec ~/.local/share/minilaunch/MiniLaunch.app/Contents/MacOS/MiniLaunch --quit'
 ```
 
 ## Styling
@@ -80,13 +78,3 @@ Defaults are gray and white with system monospace. Fonts must be installed on yo
 The development app is built in `build/MiniLaunch.app`. Use `./scripts/toggle.sh` to show or hide it and `./scripts/quit.sh` to quit.
 
 Release notes are in [CHANGELOG.md](CHANGELOG.md). See [docs/releases.md](docs/releases.md) for source packaging and publishing steps.
-
-### Layout
-
-- `src/`: Objective-C app code and headers
-- `resources/`: app bundle metadata
-- `examples/`: sample configuration
-- `scripts/`: installed launcher helpers
-- `tests/`: unit tests and shell checks
-
-Build output, prompt history, and `.local/` scratch files are ignored. Keep recordings, demos, and personal experiments out of commits.
